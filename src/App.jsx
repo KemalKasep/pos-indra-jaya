@@ -1,17 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const App = () => {
-  // ---------------------------------------------------------
   // 1. STATE AUTENTIKASI (LOGIN)
-  // ---------------------------------------------------------
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [role, setRole] = useState(null); // 'ADMIN' atau 'CABANG'
+  const [role, setRole] = useState(null); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  // ---------------------------------------------------------
   // 2. STATE KASIR & APLIKASI
-  // ---------------------------------------------------------
   const [activeTab, setActiveTab] = useState('KASIR'); 
   const [produk, setProduk] = useState([]);
   const [keranjang, setKeranjang] = useState([]);
@@ -27,32 +23,19 @@ const App = () => {
 
   const API_URL = 'https://script.google.com/macros/s/AKfycbzjFdeEb2U-7oozNYX-FFKTAB8Sp5PspTgf9qg3_eCC0LXlYl5ngkUibhpxBheNxDa4/exec';
 
-  // ---------------------------------------------------------
   // 3. LOGIC & FUNGSI
-  // ---------------------------------------------------------
   const handleLogin = (e) => {
     e.preventDefault();
-    // Konfigurasi Akun Default
     if (username === 'admin' && password === 'admin123') {
-      setRole('ADMIN');
-      setActiveTab('KASIR');
-      setIsLoggedIn(true);
+      setRole('ADMIN'); setActiveTab('KASIR'); setIsLoggedIn(true);
     } else if (username === 'cabang' && password === 'cabang123') {
-      setRole('CABANG');
-      setActiveTab('KATALOG'); // Paksa masuk ke tab khusus cabang
-      setIsLoggedIn(true);
-    } else {
-      alert('Username atau PIN salah!');
-    }
+      setRole('CABANG'); setActiveTab('KATALOG'); setIsLoggedIn(true);
+    } else { alert('Username atau PIN salah!'); }
   };
 
   const handleLogout = () => {
     if(window.confirm('Yakin ingin keluar?')) {
-      setIsLoggedIn(false);
-      setRole(null);
-      setUsername('');
-      setPassword('');
-      setKeranjang([]);
+      setIsLoggedIn(false); setRole(null); setUsername(''); setPassword(''); setKeranjang([]);
     }
   };
 
@@ -76,12 +59,8 @@ const App = () => {
       fetch(`${API_URL}?action=getRiwayat`)
         .then(res => res.json())
         .then(data => {
-          if (data.riwayat && data.ringkasan) {
-            setRiwayat(data.riwayat);
-            setRingkasan(data.ringkasan);
-          } else {
-            setRiwayat(Array.isArray(data) ? data : []);
-          }
+          if (data.riwayat && data.ringkasan) { setRiwayat(data.riwayat); setRingkasan(data.ringkasan); } 
+          else { setRiwayat(Array.isArray(data) ? data : []); }
           setIsLoadingRiwayat(false);
         }).catch(err => { console.error(err); setIsLoadingRiwayat(false); });
     }
@@ -95,24 +74,30 @@ const App = () => {
     (p.barcode && String(p.barcode).toLowerCase().includes(keyword.toLowerCase()))
   );
 
+  // FUNGSI BARU: Langsung tambah ke keranjang untuk klik manual
+  const tambahKeKeranjang = (item) => {
+    setKeranjang(prev => {
+      const ada = prev.find(k => k.kode === item.kode);
+      if (ada) return prev.map(k => k.kode === item.kode ? { ...k, qty: k.qty + 1 } : k);
+      return [...prev, { ...item, qty: 1 }];
+    });
+    setKeyword('');
+    scannerRef.current?.focus();
+  };
+
+  // DIPERBAIKI: Menangani Scanner / Tombol Enter
   const handleScanner = (e) => {
     if (e.key === 'Enter' && keyword.trim() !== '') {
       let item = produk.find(p => p.kode.toLowerCase() === keyword.toLowerCase() || p.barcode === keyword);
       if (!item && produkDifilter.length === 1) item = produkDifilter[0];
 
       if (item) {
-        setKeranjang(prev => {
-          const ada = prev.find(k => k.kode === item.kode);
-          if (ada) return prev.map(k => k.kode === item.kode ? { ...k, qty: k.qty + 1 } : k);
-          return [...prev, { ...item, qty: 1 }];
-        });
+        tambahKeKeranjang(item);
       } else {
-        alert('Barang tidak ditemukan!');
+        alert('Barang tidak ditemukan! Jika mencari nama, pastikan hasilnya sisa 1 atau klik manual barangnya.');
+        setKeyword(''); 
+        scannerRef.current?.focus();
       }
-      
-      // FIX BUG 1: Selalu kosongkan keyword meskipun error, agar karakter tidak menumpuk
-      setKeyword(''); 
-      scannerRef.current?.focus(); 
     }
   };
 
@@ -133,18 +118,10 @@ const App = () => {
       if (result.status === "success") {
         alert(`Berhasil!\nNo Struk: ${result.struk}\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`);
         
-        // Simpan data ke variabel sementara untuk print, lalu langsung reset aplikasi (FIX BUG 2)
         const dataKeranjang = [...keranjang];
-        const subtotalPrint = subtotal;
-        const diskonPrint = diskon;
-        const totalPrint = totalAkhir;
-        const tipePrint = pembayaran;
+        const subtotalPrint = subtotal, diskonPrint = diskon, totalPrint = totalAkhir, tipePrint = pembayaran;
 
-        // Reset segera dijalankan tanpa menunggu proses print
-        setKeranjang([]); 
-        setDiskon(0); 
-        setKeyword(''); 
-        scannerRef.current?.focus();
+        setKeranjang([]); setDiskon(0); setKeyword(''); scannerRef.current?.focus();
 
         try {
           const strukWindow = window.open('', '_blank', 'width=300,height=600');
@@ -176,16 +153,11 @@ const App = () => {
             `;
             strukWindow.document.write(htmlStruk);
             strukWindow.document.close();
-          } else {
-            console.warn("Pop-up diblokir HP, struk dilewati.");
           }
-        } catch (printErr) {
-          console.error("Gagal print struk", printErr);
-        }
+        } catch (printErr) { console.error("Gagal print struk", printErr); }
       }
-    } catch (error) {
-      alert('Error Jaringan. Pastikan API URL benar.');
-    } finally { setIsProcessing(false); }
+    } catch (error) { alert('Error Jaringan. Pastikan API URL benar.'); } 
+    finally { setIsProcessing(false); }
   };
 
   const prosesInputSaldo = async () => {
@@ -203,16 +175,14 @@ const App = () => {
       });
       const result = await response.json();
       if (result.status === "success") {
-        alert("Saldo Awal berhasil disimpan ke sistem!");
+        alert("Saldo Awal berhasil disimpan!");
         setRingkasan(prev => ({ ...prev, saldoAwal: angka }));
       } else { alert("Gagal menyimpan saldo."); }
     } catch (e) { alert("Error jaringan."); } 
     finally { setIsProcessing(false); }
   };
 
-  // ---------------------------------------------------------
-  // 4. RENDER HALAMAN LOGIN (Jika belum login)
-  // ---------------------------------------------------------
+  // 4. HALAMAN LOGIN
   if (!isLoggedIn) {
     return (
       <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: '#f1f5f9' }}>
@@ -231,30 +201,24 @@ const App = () => {
                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: '#475569', fontWeight: 'bold' }}>PIN / Password</label>
                  <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Masukkan PIN" style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px' }} required />
               </div>
-              <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', transition: '0.2s' }}>
-                Masuk Aplikasi
-              </button>
+              <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Masuk Aplikasi</button>
            </form>
         </div>
       </div>
     );
   }
 
-  // ---------------------------------------------------------
-  // 5. RENDER DASHBOARD UTAMA (Setelah Login)
-  // ---------------------------------------------------------
+  // 5. DASHBOARD UTAMA
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif", backgroundColor: '#f3f4f6' }}>
       
-      {/* SIDEBAR KIRI */}
+      {/* SIDEBAR */}
       <div style={{ width: '260px', backgroundColor: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ padding: '25px 20px', display: 'flex', alignItems: 'center', gap: '15px' }}>
           <div style={{ backgroundColor: '#3b82f6', width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🏪</div>
           <div>
             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Indra Jaya Pusat</h2>
-            <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: '8px', height: '8px', backgroundColor: '#10b981', borderRadius: '50%', display: 'inline-block' }}></span> {role === 'ADMIN' ? 'Admin Panel' : 'Akses Cabang'}
-            </div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '8px', height: '8px', backgroundColor: '#10b981', borderRadius: '50%', display: 'inline-block' }}></span> {role === 'ADMIN' ? 'Admin Panel' : 'Akses Cabang'}</div>
           </div>
         </div>
 
@@ -278,14 +242,12 @@ const App = () => {
               <div style={{ fontSize: '12px', color: '#94a3b8' }}>{role}</div>
             </div>
           </div>
-          <button onClick={handleLogout} style={{ width: '100%', padding: '10px', backgroundColor: 'transparent', border: '1px solid #475569', borderRadius: '6px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>🚪 Logout</button>
+          <button onClick={handleLogout} style={{ width: '100%', padding: '10px', backgroundColor: 'transparent', border: '1px solid #475569', borderRadius: '6px', color: 'white', cursor: 'pointer' }}>🚪 Logout</button>
         </div>
       </div>
 
-      {/* KONTEN UTAMA */}
+      {/* AREA KANAN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        
-        {/* HEADER ATAS */}
         <div style={{ backgroundColor: 'white', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: '20px', color: '#1e293b' }}>Selamat Pagi, {username} 👋</h1>
@@ -297,28 +259,28 @@ const App = () => {
           </div>
         </div>
 
-        {/* AREA TAB KONTEN */}
         <div style={{ flex: 1, overflow: 'hidden', padding: '20px 30px', backgroundImage: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' }}>
           
-          {/* TAB: KASIR (ADMIN ONLY) */}
+          {/* TAB KASIR (ADMIN ONLY) */}
           {activeTab === 'KASIR' && role === 'ADMIN' && (
             <div style={{ display: 'flex', height: '100%', gap: '25px' }}>
               <div style={{ flex: 2, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '15px', top: '15px', fontSize: '18px' }}>🔍</span>
-                    <input ref={scannerRef} type="text" placeholder="Scan barcode atau cari nama barang..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing} style={{ width: '100%', boxSizing: 'border-box', padding: '15px 15px 15px 45px', fontSize: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} />
-                  </div>
+                <div style={{ position: 'relative', marginBottom: '20px' }}>
+                  <span style={{ position: 'absolute', left: '15px', top: '15px', fontSize: '18px' }}>🔍</span>
+                  <input ref={scannerRef} type="text" placeholder="Scan barcode atau cari nama barang..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing} style={{ width: '100%', boxSizing: 'border-box', padding: '15px 15px 15px 45px', fontSize: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }} />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '15px', overflowY: 'auto', paddingBottom: '10px', paddingRight: '10px' }}>
-                  {produk.length === 0 ? <p style={{ color: '#64748b' }}>Memuat katalog...</p> : produkDifilter.map(p => (
-                    <div key={p.kode} onClick={() => { setKeyword(p.kode); handleScanner({ key: 'Enter' }); }} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '15px', cursor: 'pointer', border: '1px solid #e2e8f0', display: 'flex', gap: '15px', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '15px', overflowY: 'auto', paddingBottom: '10px' }}>
+                  {produk.length === 0 ? <p>Memuat katalog...</p> : produkDifilter.map(p => (
+                    <div key={p.kode} onClick={() => tambahKeKeranjang(p)} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '15px', cursor: 'pointer', border: '1px solid #e2e8f0', display: 'flex', gap: '15px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                       <div style={{ width: '50px', height: '50px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>💡</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#1e293b', marginBottom: '4px', lineHeight: '1.3' }}>{p.nama}</div>
+                        <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#1e293b', marginBottom: '4px' }}>{p.nama}</div>
                         <div style={{ color: '#64748b', fontSize: '11px', marginBottom: '8px' }}>{p.kode} • Stok: {p.stok}</div>
                         <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '15px' }}>Rp {p.harga.toLocaleString('id-ID')}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <div style={{ width: '28px', height: '28px', backgroundColor: '#dcfce7', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px' }}>+</div>
                       </div>
                     </div>
                   ))}
@@ -326,10 +288,8 @@ const App = () => {
               </div>
 
               {/* KERANJANG KANAN */}
-              <div style={{ width: '360px', backgroundColor: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', flexShrink: 0 }}>
-                <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b' }}>🛒 Keranjang Belanja</h3>
-                </div>
+              <div style={{ width: '360px', backgroundColor: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', border: '1px solid #e2e8f0' }}>
+                <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}><h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>🛒 Keranjang Belanja</h3></div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '15px 20px' }}>
                   {keranjang.length === 0 ? <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '50px' }}>Keranjang kosong</p> : keranjang.map(k => (
                     <div key={k.kode} style={{ display: 'flex', gap: '15px', padding: '15px', border: '1px solid #e2e8f0', borderRadius: '12px', marginBottom: '10px' }}>
@@ -367,16 +327,16 @@ const App = () => {
             </div>
           )}
 
-          {/* TAB: KATALOG (CABANG ONLY) */}
+          {/* TAB KATALOG (CABANG) */}
           {activeTab === 'KATALOG' && role === 'CABANG' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ marginBottom: '25px', position: 'relative', maxWidth: '600px' }}>
                 <span style={{ position: 'absolute', left: '15px', top: '15px', fontSize: '18px' }}>🔍</span>
-                <input type="text" placeholder="Cari nama barang atau barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '15px 15px 15px 45px', fontSize: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }} />
+                <input type="text" placeholder="Cari nama barang atau barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '15px 15px 15px 45px', fontSize: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none' }} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', overflowY: 'auto', paddingBottom: '20px', paddingRight: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', overflowY: 'auto', paddingBottom: '20px' }}>
                 {produkDifilter.map(p => (
-                  <div key={p.kode} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <div key={p.kode} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0', display: 'flex', gap: '15px' }}>
                     <div style={{ width: '60px', height: '60px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>💡</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#1e293b', marginBottom: '6px' }}>{p.nama}</div>
@@ -389,7 +349,7 @@ const App = () => {
             </div>
           )}
 
-          {/* TAB: RIWAYAT (ADMIN ONLY) - Disederhanakan untuk efisiensi ruang baca */}
+          {/* TAB RIWAYAT */}
           {activeTab === 'RIWAYAT' && role === 'ADMIN' && (
             <div style={{ height: '100%', overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '25px' }}>
@@ -402,15 +362,13 @@ const App = () => {
                 <h3 style={{ margin: '0 0 20px 0' }}>Riwayat Transaksi Terakhir</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
                   <thead><tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b' }}><th style={{ padding: '12px 10px' }}>No Struk</th><th style={{ padding: '12px 10px' }}>Barang</th><th style={{ padding: '12px 10px' }}>Qty</th><th style={{ padding: '12px 10px' }}>Total</th><th style={{ padding: '12px 10px' }}>Tipe</th></tr></thead>
-                  <tbody>
-                    {riwayat.map((r, i) => (<tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}><td style={{ padding: '15px 10px' }}>{r.noStruk}</td><td style={{ padding: '15px 10px', fontWeight: '500' }}>{r.nama}</td><td style={{ padding: '15px 10px' }}>{r.qty}</td><td style={{ padding: '15px 10px', color: '#10b981', fontWeight: 'bold' }}>Rp {(r.total || 0).toLocaleString('id-ID')}</td><td style={{ padding: '15px 10px' }}>{r.pembayaran}</td></tr>))}
-                  </tbody>
+                  <tbody>{riwayat.map((r, i) => (<tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}><td style={{ padding: '15px 10px' }}>{r.noStruk}</td><td style={{ padding: '15px 10px', fontWeight: '500' }}>{r.nama}</td><td style={{ padding: '15px 10px' }}>{r.qty}</td><td style={{ padding: '15px 10px', color: '#10b981', fontWeight: 'bold' }}>Rp {(r.total || 0).toLocaleString('id-ID')}</td><td style={{ padding: '15px 10px' }}>{r.pembayaran}</td></tr>))}</tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* TAB: UTILITY (ADMIN ONLY) */}
+          {/* TAB UTILITY */}
           {activeTab === 'UTILITY' && role === 'ADMIN' && (
             <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '16px', border: '1px solid #e2e8f0', maxWidth: '600px' }}>
               <h2 style={{ margin: '0 0 10px 0' }}>Utility & Tutup Kasir</h2>
