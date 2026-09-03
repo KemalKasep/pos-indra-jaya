@@ -19,7 +19,7 @@ const App = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const scannerRef = useRef(null);
 
-  const API_URL = 'https://script.google.com/macros/s/AKfycbzjFdeEb2U-7oozNYX-FFKTAB8Sp5PspTgf9qg3_eCC0LXlYl5ngkUibhpxBheNxDa4/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbz9nzSX94WpWYL_-pdjhuaJlTsBElnXIRN5rbqwF3G2Jn_-AL1hEdCri_f7P0MEH28r/exec';
 
   const handleLogin = (e) => {
     e.preventDefault();
