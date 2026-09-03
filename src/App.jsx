@@ -19,12 +19,12 @@ const App = () => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const scannerRef = useRef(null);
 
-  const API_URL = 'https://script.google.com/macros/s/AKfycbz9nzSX94WpWYL_-pdjhuaJlTsBElnXIRN5rbqwF3G2Jn_-AL1hEdCri_f7P0MEH28r/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyChLbe5Twb4Vb7thM8vB4UE66VFCw1yIK91tCtnxTaRiIzGpJn86ffU11ZXb9qSqqM/exec';
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin123') { setRole('ADMIN'); setActiveTab('KASIR'); setIsLoggedIn(true); } 
-    else if (username === 'cabang' && password === 'cabang123') { setRole('CABANG'); setActiveTab('KATALOG'); setIsLoggedIn(true); } 
+    if (username === 'kemal' && password === 'malasel123') { setRole('ADMIN'); setActiveTab('KASIR'); setIsLoggedIn(true); } 
+    else if (username === 'syarip' && password === 'syarip123') { setRole('CABANG'); setActiveTab('KATALOG'); setIsLoggedIn(true); } 
     else { alert('Username atau PIN salah!'); }
   };
 
