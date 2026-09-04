@@ -15,19 +15,48 @@ const App = () => {
   const [diskon, setDiskon] = useState(0);
   const [pembayaran, setPembayaran] = useState('CASH');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isLoadingRiwayat, setIsLoadingRiwayat] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState(0); // STATE BARU UNTUK OFFLINE
   const [currentTime, setCurrentTime] = useState(new Date());
   
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scannerRef = useRef(null);
 
-  // PASTIKAN URL API INI SESUAI DENGAN DEPLOYMENT BARU ANDA
+  // PASTE URL DEPLOYMENT BARU ANDA DI SINI
   const API_URL = 'https://script.google.com/macros/s/AKfycbwxWGBYPBgPlUwtsg2CTHjq7DzVRSVDVrkXKK_9LI0thuLof7zUI_ixrHRA4l5GZw/exec';
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // SISTEM PENGECEKAN DATA OFFLINE (LOCAL STORAGE)
+  useEffect(() => {
+    const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
+    setOfflineQueue(pending.length);
+  }, []);
+
+  const syncOfflineData = async () => {
+    const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
+    if (pending.length === 0) return;
+    
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(pending) });
+      const result = await response.json();
+      if (result.status === 'success') {
+        localStorage.removeItem('offline_tx');
+        setOfflineQueue(0);
+        alert(`${pending.length} Transaksi OFFLINE berhasil diamankan ke Google Sheets!`);
+      }
+    } catch(e) {
+      alert("Gagal sinkronisasi. Pastikan internet sudah terhubung stabil.");
+    }
+  };
+
+  // OTOMATIS SINKRON SAAT INTERNET KEMBALI MENYALA
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineData);
+    return () => window.removeEventListener('online', syncOfflineData);
   }, []);
 
   const handleLogin = (e) => {
@@ -49,12 +78,10 @@ const App = () => {
 
   useEffect(() => {
     if (isLoggedIn && activeTab === 'RIWAYAT' && role === 'ADMIN') {
-      setIsLoadingRiwayat(true);
       fetch(`${API_URL}?action=getRiwayat`).then(res => res.json()).then(data => {
         if (data.riwayat && data.ringkasan) { setRiwayat(data.riwayat); setRingkasan(data.ringkasan); } 
         else { setRiwayat(Array.isArray(data) ? data : []); }
-        setIsLoadingRiwayat(false);
-      }).catch(err => { console.error(err); setIsLoadingRiwayat(false); });
+      }).catch(err => console.error(err));
     }
   }, [activeTab, isLoggedIn, role]);
 
@@ -114,7 +141,32 @@ const App = () => {
     if (keranjang.length === 0) return alert('Keranjang kosong!');
     setIsProcessing(true);
     const validKeranjang = keranjang.map(k => ({...k, qty: parseFloat(k.qty)||1}));
-    const payload = { member: 'UMUM', pembayaran, diskon, subtotal, totalAkhir, items: validKeranjang };
+    
+    const payload = { 
+      member: 'UMUM', 
+      pembayaran, 
+      diskon, 
+      subtotal, 
+      totalAkhir, 
+      items: validKeranjang,
+      timestamp: new Date().toISOString() 
+    };
+
+    // LOGIKA PENYELAMATAN DATA SAAT OFFLINE
+    if (!navigator.onLine) {
+      payload.offlineStruk = `OFF-${new Date().getTime()}`;
+      const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
+      pending.push(payload);
+      localStorage.setItem('offline_tx', JSON.stringify(pending));
+      setOfflineQueue(pending.length);
+      
+      const confirmPrint = window.confirm(`INTERNET TERPUTUS!\nTransaksi disimpan otomatis ke memori HP (Mode Offline).\n\nIngin mencetak struk sekarang?`);
+      if (confirmPrint) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
+      
+      setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
+      setIsProcessing(false);
+      return;
+    }
 
     try {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
@@ -124,7 +176,20 @@ const App = () => {
         if (confirmPrint) formatCetakStruk(result.struk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
         setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       }
-    } catch (e) { alert('Error Jaringan.'); } finally { setIsProcessing(false); }
+    } catch (e) { 
+      // JIKA INTERNET TIBA-TIBA MATI SAAT SEDANG LOADING
+      payload.offlineStruk = `OFF-${new Date().getTime()}`;
+      const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
+      pending.push(payload);
+      localStorage.setItem('offline_tx', JSON.stringify(pending));
+      setOfflineQueue(pending.length);
+      
+      alert("Koneksi gagal saat proses! Transaksi dialihkan ke Mode Offline.");
+      formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
+      setKeranjang([]); setDiskon(0); setKeyword('');
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   const reprintStruk = (noStruk) => {
@@ -143,7 +208,7 @@ const App = () => {
     try {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'inputSaldo', nominal: angka }) });
       const result = await response.json();
-      if (result.status === "success") { alert("Saldo Awal tersimpan!"); setRingkasan(prev => ({ ...prev, saldoAwal: angka })); }
+      if (result.status === "success") { alert("Saldo Awal berhasil ditulis ke Sheets!"); setRingkasan(prev => ({ ...prev, saldoAwal: angka })); }
     } catch (e) { alert("Error jaringan."); } finally { setIsProcessing(false); }
   };
 
@@ -155,15 +220,16 @@ const App = () => {
     try {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'pengeluaran', keterangan: ket, nominal: angka }) });
       const result = await response.json();
-      if(result.status === "success") alert("Pengeluaran dicatat!");
+      if(result.status === "success") alert("Pengeluaran dicatat ke Sheets!");
     } catch(e){ alert("Error jaringan."); } finally { setIsProcessing(false); }
   };
 
-  // FUNGSI TUTUP KASIR YANG SUDAH DIPERBARUI SECARA TOTAL
   const prosesTutupKasir = async () => {
+    if (offlineQueue > 0) return alert("Mohon sinkronkan data Offline terlebih dahulu sebelum Tutup Kasir!");
+
     const inputFisik = prompt("TUTUP KASIR\nHitung dan masukkan total UANG FISIK (CASH) di laci saat ini:\n(Contoh: 1500000)");
-    
     if (inputFisik === null || inputFisik.trim() === "") return; 
+    
     const kasFisik = parseInt(inputFisik.replace(/\D/g, ''));
     if (isNaN(kasFisik)) return alert("Input dibatalkan! Uang fisik harus berupa angka.");
 
@@ -171,53 +237,24 @@ const App = () => {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(API_URL, { 
-        method: 'POST', 
-        body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) 
-      });
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) });
       const result = await response.json();
       
       if (result.status === "success" && result.dataFinal) {
         const { saldoAwal, omzetCash, omzetTF, kasSeharusnya } = result.dataFinal;
-        
         const selisih = kasFisik - Number(kasSeharusnya);
         const warnaSelisih = selisih < 0 ? 'red' : (selisih > 0 ? 'green' : 'black');
         const teksSelisih = selisih < 0 ? `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}` : (selisih > 0 ? `+ Rp ${selisih.toLocaleString('id-ID')}` : 'Rp 0 (BALANCE)');
         
         const w = window.open('', '_blank', 'width=500,height=750');
         if (w) {
-          const htmlReport = `
-            <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;">
-              <h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2>
-              <p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p>
-              <hr style="border-top: 2px dashed #000; margin: 20px 0;"/>
-              <table style="width: 100%; font-size: 15px; line-height: 2;">
-                <tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr>
-                <tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr>
-                <tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr>
-              </table>
-              <hr style="border-top: 2px solid #000; margin: 20px 0;"/>
-              <table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;">
-                <tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr>
-                <tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr>
-                <tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr>
-              </table>
-              <p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG untuk arsip.</p>
-            </div>
-            <script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>
-          `;
+          const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p><hr style="border-top: 2px dashed #000; margin: 20px 0;"/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr></table><hr style="border-top: 2px solid #000; margin: 20px 0;"/><table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;"><tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr><tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr><tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr></table><p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG untuk arsip.</p></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
           w.document.write(htmlReport); w.document.close();
         }
-        alert("Kasir berhasil ditutup!");
+        alert("Kasir berhasil ditutup! Data fisik tercatat di Sheets.");
         setRiwayat([]); 
-      } else {
-        alert("Tutup kasir dieksekusi, tetapi backend belum mengembalikan data final. Pastikan Apps Script sudah diperbarui.");
       }
-    } catch (e) { 
-      alert("Error saat Tutup Kasir. Pastikan koneksi stabil."); 
-    } finally { 
-      setIsProcessing(false); 
-    }
+    } catch (e) { alert("Error saat Tutup Kasir. Pastikan koneksi stabil."); } finally { setIsProcessing(false); }
   };
 
   if (!isLoggedIn) {
@@ -249,6 +286,15 @@ const App = () => {
       )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: isMobile ? '60px' : '0' }}>
+        
+        {/* BANNER PERINGATAN OFFLINE */}
+        {offlineQueue > 0 && (
+          <div style={{ backgroundColor: '#f59e0b', color: 'white', padding: '10px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontWeight: 'bold' }}>
+            <span>⚠️ {offlineQueue} Transaksi Tertahan di Mode Offline</span>
+            <button onClick={syncOfflineData} style={{ padding: '5px 15px', backgroundColor: 'white', color: '#f59e0b', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Sinkronkan Sekarang</button>
+          </div>
+        )}
+
         <div style={{ backgroundColor: 'white', padding: isMobile ? '12px 15px' : '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0' }}>
           <div><h1 style={{ margin: 0, fontSize: isMobile ? '16px' : '20px', color: '#1e293b' }}>Hai, {username} 👋</h1></div>
           <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 'bold', fontSize: isMobile ? '14px' : '15px', color: '#1e293b' }}>{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div></div>
