@@ -7,9 +7,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto', // Pendaftaran otomatis di latar belakang yang aman untuk HP
+      injectRegister: 'auto',
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'] // Memastikan semua file tersimpan untuk mode offline
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        navigateFallback: '/index.html' // Kunci untuk mengatasi blank screen di Vercel
       },
       manifest: {
         name: 'Kasir Indra Jaya Pusat',
