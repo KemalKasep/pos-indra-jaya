@@ -6,14 +6,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // Otomatis update aplikasi jika ada versi baru
+      registerType: 'autoUpdate',
+      injectRegister: 'auto', // Pendaftaran otomatis di latar belakang yang aman untuk HP
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'] // Memastikan semua file tersimpan untuk mode offline
+      },
       manifest: {
         name: 'Kasir Indra Jaya Pusat',
         short_name: 'Indra Jaya',
         description: 'Sistem POS Kasir Indra Jaya Pusat',
         theme_color: '#1e293b',
         background_color: '#f1f5f9',
-        display: 'standalone', // Membuatnya full screen tanpa address bar
+        display: 'standalone',
         orientation: 'portrait',
         icons: [
           {
