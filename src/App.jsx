@@ -22,7 +22,7 @@ const App = () => {
   const scannerRef = useRef(null);
 
   // PASTE URL API BARU ANDA DI SINI
-  const API_URL = 'https://script.google.com/macros/s/AKfycbzjFdeEb2U-7oozNYX-FFKTAB8Sp5PspTgf9qg3_eCC0LXlYl5ngkUibhpxBheNxDa4/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwxWGBYPBgPlUwtsg2CTHjq7DzVRSVDVrkXKK_9LI0thuLof7zUI_ixrHRA4l5GZw/exec';
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
