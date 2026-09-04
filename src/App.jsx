@@ -159,23 +159,65 @@ const App = () => {
     } catch(e){ alert("Error jaringan."); } finally { setIsProcessing(false); }
   };
 
+  // FUNGSI TUTUP KASIR YANG SUDAH DIPERBARUI SECARA TOTAL
   const prosesTutupKasir = async () => {
-    if(!window.confirm("Tutup Kasir dan cetak laporan?")) return;
+    const inputFisik = prompt("TUTUP KASIR\nHitung dan masukkan total UANG FISIK (CASH) di laci saat ini:\n(Contoh: 1500000)");
+    
+    if (inputFisik === null || inputFisik.trim() === "") return; 
+    const kasFisik = parseInt(inputFisik.replace(/\D/g, ''));
+    if (isNaN(kasFisik)) return alert("Input dibatalkan! Uang fisik harus berupa angka.");
+
+    if(!window.confirm(`Uang Fisik diinput: Rp ${kasFisik.toLocaleString('id-ID')}\nYakin ingin menyelesaikan hari dan Tutup Kasir sekarang?`)) return;
+
     setIsProcessing(true);
     try {
-      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir' }) });
+      const response = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) 
+      });
       const result = await response.json();
-      if (result.status === "success") {
-        const omzetCash = riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0);
-        const omzetTf = riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0);
-        const kasSeharusnya = Number(ringkasan?.saldoAwal || 0) + omzetCash;
-        const w = window.open('', '_blank', 'width=500,height=700');
+      
+      if (result.status === "success" && result.dataFinal) {
+        const { saldoAwal, omzetCash, omzetTF, kasSeharusnya } = result.dataFinal;
+        
+        const selisih = kasFisik - Number(kasSeharusnya);
+        const warnaSelisih = selisih < 0 ? 'red' : (selisih > 0 ? 'green' : 'black');
+        const teksSelisih = selisih < 0 ? `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}` : (selisih > 0 ? `+ Rp ${selisih.toLocaleString('id-ID')}` : 'Rp 0 (BALANCE)');
+        
+        const w = window.open('', '_blank', 'width=500,height=750');
         if (w) {
-          const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">${new Date().toLocaleString('id-ID')}</p><hr/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(ringkasan?.saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${omzetCash.toLocaleString('id-ID')}</td></tr><tr><td>Omzet Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${omzetTf.toLocaleString('id-ID')}</td></tr></table><hr/><div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold;"><span>KAS CASH:</span><span>Rp ${kasSeharusnya.toLocaleString('id-ID')}</span></div></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
+          const htmlReport = `
+            <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;">
+              <h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2>
+              <p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p>
+              <hr style="border-top: 2px dashed #000; margin: 20px 0;"/>
+              <table style="width: 100%; font-size: 15px; line-height: 2;">
+                <tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr>
+                <tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr>
+                <tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr>
+              </table>
+              <hr style="border-top: 2px solid #000; margin: 20px 0;"/>
+              <table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;">
+                <tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr>
+                <tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr>
+                <tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr>
+              </table>
+              <p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG untuk arsip.</p>
+            </div>
+            <script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>
+          `;
           w.document.write(htmlReport); w.document.close();
         }
+        alert("Kasir berhasil ditutup!");
+        setRiwayat([]); 
+      } else {
+        alert("Tutup kasir dieksekusi, tetapi backend belum mengembalikan data final. Pastikan Apps Script sudah diperbarui.");
       }
-    } catch (e) { alert("Error saat Tutup Kasir."); } finally { setIsProcessing(false); }
+    } catch (e) { 
+      alert("Error saat Tutup Kasir. Pastikan koneksi stabil."); 
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
 
   if (!isLoggedIn) {
