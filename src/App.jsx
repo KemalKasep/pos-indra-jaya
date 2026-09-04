@@ -21,7 +21,7 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scannerRef = useRef(null);
 
-  // PASTE URL API BARU ANDA DI SINI
+  // PASTIKAN URL API INI SESUAI DENGAN DEPLOYMENT BARU ANDA
   const API_URL = 'https://script.google.com/macros/s/AKfycbwxWGBYPBgPlUwtsg2CTHjq7DzVRSVDVrkXKK_9LI0thuLof7zUI_ixrHRA4l5GZw/exec';
 
   useEffect(() => {
@@ -85,7 +85,6 @@ const App = () => {
     }
   };
 
-  // MENDUKUNG ANGKA DESIMAL (METERAN)
   const ubahQtyKetikan = (kode, nilai) => setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: nilai } : k));
   const validasiQty = (kode, nilai) => {
     let angka = parseFloat(nilai);
@@ -103,7 +102,7 @@ const App = () => {
     if (w) {
       let htmlStruk = `<div style="font-family: monospace; font-size: 12px; width: 100%; max-width: 220px; margin: 0 auto; color: #000;"><div style="text-align: center; font-weight: bold; font-size: 14px;">INDRA JAYA PUSAT</div><div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px;">${new Date().toLocaleString('id-ID')}<br>Struk: ${noStruk}<br>Tipe: ${tp}</div><table style="width: 100%; font-size: 12px; border-collapse: collapse;">`;
       itemsData.forEach(item => { 
-        let hrg = item.harga || Math.round((item.total||0)/(item.qty||1)); // Antisipasi data riwayat
+        let hrg = item.harga || Math.round((item.total||0)/(item.qty||1)); 
         htmlStruk += `<tr><td colspan="3">${item.nama.substring(0, 18)}</td></tr><tr><td>${item.qty}x</td><td>${hrg.toLocaleString('id-ID')}</td><td style="text-align: right;">${((item.qty * hrg) || item.total).toLocaleString('id-ID')}</td></tr>`; 
       });
       htmlStruk += `</table><div style="border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px;"><table style="width: 100%; font-size: 12px;"><tr><td>Subtotal</td><td style="text-align: right;">${sb.toLocaleString('id-ID')}</td></tr><tr><td>Diskon</td><td style="text-align: right;">${ds.toLocaleString('id-ID')}</td></tr><tr style="font-weight: bold; font-size: 14px;"><td>TOTAL</td><td style="text-align: right;">${tot.toLocaleString('id-ID')}</td></tr></table></div><div style="text-align: center; margin-top: 10px;">Terima Kasih</div></div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),500);}</script>`;
@@ -135,9 +134,49 @@ const App = () => {
     formatCetakStruk(noStruk, items, totAkhir, 0, totAkhir, items[0].pembayaran);
   };
 
-  const prosesInputSaldo = async () => { /* ... tetap sama seperti sebelumnya ... */ };
-  const prosesPengeluaran = async () => { /* ... tetap sama seperti sebelumnya ... */ };
-  const prosesTutupKasir = async () => { /* ... tetap sama seperti sebelumnya ... */ };
+  const prosesInputSaldo = async () => {
+    const nominal = prompt("Masukkan jumlah Saldo Awal (CASH) hari ini:\nContoh: 150000");
+    if (!nominal) return;
+    const angka = parseInt(nominal.replace(/\D/g, ''));
+    if (isNaN(angka)) return alert("Input harus angka!");
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'inputSaldo', nominal: angka }) });
+      const result = await response.json();
+      if (result.status === "success") { alert("Saldo Awal tersimpan!"); setRingkasan(prev => ({ ...prev, saldoAwal: angka })); }
+    } catch (e) { alert("Error jaringan."); } finally { setIsProcessing(false); }
+  };
+
+  const prosesPengeluaran = async () => {
+    const ket = prompt("Keterangan Pengeluaran:"); if(!ket) return;
+    const nom = prompt("Nominal (Rp):"); if(!nom) return;
+    const angka = parseInt(nom.replace(/\D/g, '')); if (isNaN(angka)) return alert("Nominal tidak valid!");
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'pengeluaran', keterangan: ket, nominal: angka }) });
+      const result = await response.json();
+      if(result.status === "success") alert("Pengeluaran dicatat!");
+    } catch(e){ alert("Error jaringan."); } finally { setIsProcessing(false); }
+  };
+
+  const prosesTutupKasir = async () => {
+    if(!window.confirm("Tutup Kasir dan cetak laporan?")) return;
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir' }) });
+      const result = await response.json();
+      if (result.status === "success") {
+        const omzetCash = riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0);
+        const omzetTf = riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0);
+        const kasSeharusnya = Number(ringkasan?.saldoAwal || 0) + omzetCash;
+        const w = window.open('', '_blank', 'width=500,height=700');
+        if (w) {
+          const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">${new Date().toLocaleString('id-ID')}</p><hr/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(ringkasan?.saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${omzetCash.toLocaleString('id-ID')}</td></tr><tr><td>Omzet Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${omzetTf.toLocaleString('id-ID')}</td></tr></table><hr/><div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold;"><span>KAS CASH:</span><span>Rp ${kasSeharusnya.toLocaleString('id-ID')}</span></div></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
+          w.document.write(htmlReport); w.document.close();
+        }
+      }
+    } catch (e) { alert("Error saat Tutup Kasir."); } finally { setIsProcessing(false); }
+  };
 
   if (!isLoggedIn) {
     return (
@@ -188,7 +227,6 @@ const App = () => {
                 </div>
               </div>
 
-              {/* PERBAIKAN UI KERANJANG HP (FLEXWRAP) */}
               <div style={{ height: isMobile ? '50%' : '100%', width: isMobile ? '100%' : '360px', backgroundColor: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', flexShrink: 0, border: '1px solid #e2e8f0' }}>
                 <div style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9' }}><h3 style={{ margin: 0, fontSize: '15px', color: '#1e293b' }}>🛒 Keranjang</h3></div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
@@ -219,7 +257,6 @@ const App = () => {
             </div>
           )}
 
-          {/* TAB KATALOG */}
           {activeTab === 'KATALOG' && role === 'CABANG' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div style={{ marginBottom: '20px', position: 'relative' }}><span style={{ position: 'absolute', left: '15px', top: '15px', fontSize: '18px' }}>🔍</span><input type="text" placeholder="Cari nama / barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '15px 15px 15px 45px', fontSize: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', color: '#1e293b', backgroundColor: 'white' }} /></div>
@@ -229,12 +266,14 @@ const App = () => {
             </div>
           )}
 
-          {/* TAB RIWAYAT (DITAMBAH TOMBOL CETAK) */}
           {activeTab === 'RIWAYAT' && role === 'ADMIN' && (
             <div style={{ height: '100%', overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(170px, 1fr))', gap: '10px', marginBottom: '20px' }}>
                 <div style={{ background: 'linear-gradient(135deg, #1e293b, #334155)', color: 'white', padding: '15px', borderRadius: '12px' }}><div style={{ fontSize: '11px', marginBottom: '5px' }}>TOTAL OMZET</div><div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>Rp {riwayat.reduce((sum, r) => sum + (r.total || 0), 0).toLocaleString('id-ID')}</div></div>
                 <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '15px', borderRadius: '12px' }}><div style={{ fontSize: '11px', marginBottom: '5px' }}>KAS SEHARUSNYA</div><div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>Rp {(Number(ringkasan?.saldoAwal || 0) + riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + Number(r.total || 0), 0)).toLocaleString('id-ID')}</div></div>
+                <div style={{ background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: 'white', padding: '15px', borderRadius: '12px' }}><div style={{ fontSize: '11px', marginBottom: '5px' }}>SALDO AWAL</div><div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>Rp {(Number(ringkasan?.saldoAwal) || 0).toLocaleString('id-ID')}</div></div>
+                <div style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white', padding: '15px', borderRadius: '12px' }}><div style={{ fontSize: '11px', marginBottom: '5px' }}>OMZET CASH</div><div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>Rp {riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0).toLocaleString('id-ID')}</div></div>
+                <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', padding: '15px', borderRadius: '12px' }}><div style={{ fontSize: '11px', marginBottom: '5px' }}>OMZET TF</div><div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>Rp {riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0).toLocaleString('id-ID')}</div></div>
               </div>
               <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
                 <h3 style={{ margin: '0 0 15px 0', color: '#1e293b', fontSize: '16px' }}>Riwayat Transaksi</h3>
@@ -242,6 +281,17 @@ const App = () => {
                   <thead><tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b' }}><th style={{ padding: '10px' }}>Struk</th><th style={{ padding: '10px' }}>Barang</th><th style={{ padding: '10px' }}>Qty</th><th style={{ padding: '10px' }}>Total</th><th style={{ padding: '10px', textAlign: 'center' }}>Aksi</th></tr></thead>
                   <tbody>{riwayat.map((r, i) => (<tr key={i} style={{ borderBottom: '1px solid #f1f5f9', color: '#1e293b' }}><td style={{ padding: '10px' }}>{r.noStruk}</td><td style={{ padding: '10px' }}>{r.nama}</td><td style={{ padding: '10px' }}>{r.qty}</td><td style={{ padding: '10px', color: '#10b981', fontWeight: 'bold' }}>Rp {(r.total || 0).toLocaleString('id-ID')}</td><td style={{ padding: '10px', textAlign: 'center' }}><button onClick={() => reprintStruk(r.noStruk)} style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', fontSize: '12px' }}>🖨️ Cetak</button></td></tr>))}</tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'UTILITY' && role === 'ADMIN' && (
+            <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', maxWidth: '600px' }}>
+              <h2 style={{ margin: '0 0 10px 0', color: '#1e293b', fontSize: '18px' }}>Utility & Laporan</h2>
+              <div style={{ display: 'grid', gap: '15px', marginTop: '20px' }}>
+                <button onClick={prosesInputSaldo} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>💰 Input Saldo Awal</button>
+                <button onClick={prosesPengeluaran} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>💸 Input Pengeluaran</button>
+                <button onClick={prosesTutupKasir} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Tutup Kasir & Cetak</button>
               </div>
             </div>
           )}
