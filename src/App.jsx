@@ -11,12 +11,11 @@ const App = () => {
   const [keranjang, setKeranjang] = useState([]);
   const [riwayat, setRiwayat] = useState([]);
   const [ringkasan, setRingkasan] = useState(null);
-  const [dashboardData, setDashboardData] = useState(null); // State khusus Dashboard
   
   const [keyword, setKeyword] = useState('');
   const [diskon, setDiskon] = useState(0);
   const [pembayaran, setPembayaran] = useState('CASH');
-  const [tipePelanggan, setTipePelanggan] = useState('UMUM'); // Persiapan Multi-Harga
+  const [tipePelanggan, setTipePelanggan] = useState('UMUM'); 
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [offlineQueue, setOfflineQueue] = useState(0); 
@@ -25,9 +24,9 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scannerRef = useRef(null);
 
-  // KUMPULAN API
-  const API_URL = 'https://script.google.com/macros/s/AKfycbytzLuR8bcChXtI9Y-LNDdjsa5Z91ppDI5UMgxUiLb-OprWcCI3fEY9f-VXb7VxT82s/exec'; // API Kasir Utama
-  const DASHBOARD_API = 'https://script.google.com/macros/s/AKfycbwG-mQSucNHto86r0c8Nf4321W9dqRFEt4DgTJwnzxA9v0nquoc_bYigC0wUVLlBDoU/exec'; // API Dashboard Baru
+  // API KASIR UTAMA DAN API DASHBOARD
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwxWGBYPBgPlUwtsg2CTHjq7DzVRSVDVrkXKK_9LI0thuLof7zUI_ixrHRA4l5GZw/exec'; 
+  const DASHBOARD_API = 'https://script.google.com/macros/s/AKfycbwG-mQSucNHto86r0c8Nf4321W9dqRFEt4DgTJwnzxA9v0nquoc_bYigC0wUVLlBDoU/exec';
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -35,7 +34,7 @@ const App = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 1. SISTEM AUTO-LOGIN KHUSUS OWNER
+  // FITUR AUTO-LOGIN OWNER
   useEffect(() => {
     const savedSession = localStorage.getItem('owner_session');
     if (savedSession) {
@@ -49,6 +48,7 @@ const App = () => {
     }
   }, []);
 
+  // FITUR CEK ANTREAN OFFLINE
   useEffect(() => {
     const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
     setOfflineQueue(pending.length);
@@ -73,15 +73,15 @@ const App = () => {
     return () => window.removeEventListener('online', syncOfflineData);
   }, []);
 
+  // SISTEM LOGIN & HAK AKSES
   const handleLogin = (e) => {
     e.preventDefault();
-    if (username === 'bos' && password === 'bos123') { // LOGIN OWNER BARU
+    if (username === 'bos' && password === 'bos123') { 
       setRole('OWNER'); setActiveTab('DASHBOARD'); setIsLoggedIn(true);
-      localStorage.setItem('owner_session', JSON.stringify({ username, role: 'OWNER' })); // Simpan KTP Digital
+      localStorage.setItem('owner_session', JSON.stringify({ username, role: 'OWNER' })); 
     } 
     else if (username === 'kemal' && password === 'malasel123') { 
       setRole('KASIR'); setActiveTab('KASIR'); setIsLoggedIn(true); 
-      // Kasir tidak disimpan di localStorage (harus login tiap hari)
     } 
     else if (username === 'syarip' && password === 'syarip123') { 
       setRole('CABANG'); setActiveTab('KATALOG'); setIsLoggedIn(true); 
@@ -92,7 +92,7 @@ const App = () => {
   const handleLogout = () => { 
     if(window.confirm('Yakin ingin keluar?')) { 
       setIsLoggedIn(false); setRole(null); setUsername(''); setPassword(''); setKeranjang([]); 
-      localStorage.removeItem('owner_session'); // Hancurkan KTP Digital
+      localStorage.removeItem('owner_session'); 
     } 
   };
 
@@ -114,6 +114,16 @@ const App = () => {
   }, [activeTab, isLoggedIn]);
 
   useEffect(() => { if (activeTab === 'KASIR' && !isMobile) scannerRef.current?.focus(); }, [activeTab, isMobile]);
+
+  // LOGIKA SMART PRICING (ECER VS GROSIR)
+  const isGrosirAvailable = produk.some(p => p.hargaGrosir && Number(p.hargaGrosir) > 0);
+
+  const getHargaAktif = (item) => {
+    if (tipePelanggan === 'MEMBER' && item.hargaGrosir && Number(item.hargaGrosir) > 0) {
+      return Number(item.hargaGrosir);
+    }
+    return Number(item.harga); // Default ke harga ecer
+  };
 
   const produkDifilter = produk.filter(p => {
     if (!p.nama || p.nama.trim() === '') return false; 
@@ -149,7 +159,7 @@ const App = () => {
   const ubahQty = (kode, delta) => setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: Math.max(0.1, (parseFloat(k.qty)||0) + delta) } : k));
   const hapusItem = (kode) => setKeranjang(prev => prev.filter(k => k.kode !== kode));
   
-  const subtotal = keranjang.reduce((sum, item) => sum + (item.harga * (parseFloat(item.qty)||0)), 0);
+  const subtotal = keranjang.reduce((sum, item) => sum + (getHargaAktif(item) * (parseFloat(item.qty)||0)), 0);
   const totalAkhir = Math.max(0, subtotal - diskon);
 
   const formatCetakStruk = (noStruk, itemsData, sb, ds, tot, tp) => {
@@ -168,10 +178,17 @@ const App = () => {
   const prosesCheckout = async () => {
     if (keranjang.length === 0) return alert('Keranjang kosong!');
     setIsProcessing(true);
-    const validKeranjang = keranjang.map(k => ({...k, qty: parseFloat(k.qty)||1}));
+    
+    // Simpan harga yang sudah diputuskan (Ecer/Grosir) ke dalam keranjang untuk dikirim ke Sheets
+    const validKeranjang = keranjang.map(k => ({
+      ...k, 
+      qty: parseFloat(k.qty)||1,
+      harga: getHargaAktif(k) 
+    }));
     
     const payload = { member: tipePelanggan, pembayaran, diskon, subtotal, totalAkhir, items: validKeranjang, timestamp: new Date().toISOString() };
 
+    // LOGIKA OFFLINE MODE
     if (!navigator.onLine) {
       payload.offlineStruk = `OFF-${new Date().getTime()}`;
       const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
@@ -195,6 +212,7 @@ const App = () => {
         setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       }
     } catch (e) { 
+      // JIKA TERJADI ERROR JARINGAN SAAT PROSES
       payload.offlineStruk = `OFF-${new Date().getTime()}`;
       const pending = JSON.parse(localStorage.getItem('offline_tx') || '[]');
       pending.push(payload);
@@ -214,22 +232,108 @@ const App = () => {
     formatCetakStruk(noStruk, items, totAkhir, 0, totAkhir, items[0].pembayaran);
   };
 
-  // 2. OTORISASI BATAL TRANSAKSI (VOID)
+  // KEAMANAN VOID TRANSAKSI
   const batalkanTransaksi = (noStruk) => {
     if (role !== 'OWNER') {
       const pin = prompt("PERINGATAN KEAMANAN\nMasukkan PIN Otorisasi Owner untuk membatalkan transaksi ini:");
-      if (pin !== '889900') return alert("PIN Salah! Akses ditolak."); // PIN Default Void
+      if (pin !== '889900') return alert("PIN Salah! Akses ditolak."); 
     }
-    
     if (window.confirm(`Yakin ingin membatalkan struk ${noStruk}?\nOmzet akan dihapus dan stok akan dikembalikan.`)) {
       alert(`Fitur Batal disetujui! (Akan dihubungkan ke Sheets pada update API berikutnya)`);
-      // Nantinya fetch API void ditaruh di sini
     }
   };
 
-  const prosesInputSaldo = async () => { /* Sama seperti sebelumnya */ };
-  const prosesPengeluaran = async () => { /* Sama seperti sebelumnya */ };
-  const prosesTutupKasir = async () => { /* Sama seperti sebelumnya */ };
+  // UBAH HARGA JUAL DARI APLIKASI
+  const prosesUpdateHarga = async () => {
+    const kataKunci = prompt("UBAH HARGA\nMasukkan KODE atau NAMA BARANG yang ingin diubah:");
+    if (!kataKunci) return;
+
+    const barang = produk.find(p => String(p.kode).toLowerCase() === kataKunci.toLowerCase() || String(p.barcode) === kataKunci || String(p.nama).toLowerCase().includes(kataKunci.toLowerCase()));
+
+    if (!barang) return alert("Barang tidak ditemukan di sistem!");
+
+    const hargaBaru = prompt(`Ubah harga untuk:\n${barang.nama}\n(Harga saat ini: Rp ${Number(barang.harga).toLocaleString('id-ID')})\n\nMasukkan HARGA BARU (Angka saja):`);
+    if (!hargaBaru) return;
+
+    const angkaBaru = parseInt(hargaBaru.replace(/\D/g, ''));
+    if (isNaN(angkaBaru)) return alert("Format harga salah, harus berupa angka!");
+
+    if (!window.confirm(`Yakin mengubah harga ${barang.nama} menjadi Rp ${angkaBaru.toLocaleString('id-ID')}?`)) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'updateHarga', kode: barang.kode, hargaBaru: angkaBaru }) 
+      });
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        alert("Harga berhasil diubah di Database!");
+        fetch(`${API_URL}?action=getProduk`).then(res => res.json()).then(data => setProduk(Array.isArray(data) ? data : [])).catch(err => console.error(err));
+      } else {
+        alert("Gagal: " + result.message);
+      }
+    } catch (e) { alert("Error jaringan saat mengubah harga."); } 
+    finally { setIsProcessing(false); }
+  };
+
+  const prosesInputSaldo = async () => {
+    const nominal = prompt("Masukkan jumlah Saldo Awal (CASH) hari ini:\nContoh: 150000");
+    if (!nominal) return;
+    const angka = parseInt(nominal.replace(/\D/g, ''));
+    if (isNaN(angka)) return alert("Input harus angka!");
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'inputSaldo', nominal: angka }) });
+      const result = await response.json();
+      if (result.status === "success") { alert("Saldo Awal berhasil ditulis ke Sheets!"); setRingkasan(prev => ({ ...prev, saldoAwal: angka })); }
+    } catch (e) { alert("Error jaringan."); } finally { setIsProcessing(false); }
+  };
+
+  const prosesPengeluaran = async () => {
+    const ket = prompt("Keterangan Pengeluaran:"); if(!ket) return;
+    const nom = prompt("Nominal (Rp):"); if(!nom) return;
+    const angka = parseInt(nom.replace(/\D/g, '')); if (isNaN(angka)) return alert("Nominal tidak valid!");
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'pengeluaran', keterangan: ket, nominal: angka }) });
+      const result = await response.json();
+      if(result.status === "success") alert("Pengeluaran dicatat ke Sheets!");
+    } catch(e){ alert("Error jaringan."); } finally { setIsProcessing(false); }
+  };
+
+  const prosesTutupKasir = async () => {
+    if (offlineQueue > 0) return alert("Mohon sinkronkan data Offline terlebih dahulu sebelum Tutup Kasir!");
+    const inputFisik = prompt("TUTUP KASIR\nHitung dan masukkan total UANG FISIK (CASH) di laci saat ini:\n(Contoh: 1500000)");
+    if (inputFisik === null || inputFisik.trim() === "") return; 
+    
+    const kasFisik = parseInt(inputFisik.replace(/\D/g, ''));
+    if (isNaN(kasFisik)) return alert("Input dibatalkan! Uang fisik harus berupa angka.");
+
+    if(!window.confirm(`Uang Fisik diinput: Rp ${kasFisik.toLocaleString('id-ID')}\nYakin ingin menyelesaikan hari dan Tutup Kasir sekarang?`)) return;
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) });
+      const result = await response.json();
+      
+      if (result.status === "success" && result.dataFinal) {
+        const { saldoAwal, omzetCash, omzetTF, kasSeharusnya } = result.dataFinal;
+        const selisih = kasFisik - Number(kasSeharusnya);
+        const warnaSelisih = selisih < 0 ? 'red' : (selisih > 0 ? 'green' : 'black');
+        const teksSelisih = selisih < 0 ? `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}` : (selisih > 0 ? `+ Rp ${selisih.toLocaleString('id-ID')}` : 'Rp 0 (BALANCE)');
+        
+        const w = window.open('', '_blank', 'width=500,height=750');
+        if (w) {
+          const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p><hr style="border-top: 2px dashed #000; margin: 20px 0;"/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr></table><hr style="border-top: 2px solid #000; margin: 20px 0;"/><table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;"><tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr><tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr><tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr></table><p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG.</p></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
+          w.document.write(htmlReport); w.document.close();
+        }
+        alert("Kasir berhasil ditutup! Data fisik tercatat di Sheets.");
+        setRiwayat([]); 
+      }
+    } catch (e) { alert("Error saat Tutup Kasir. Pastikan koneksi stabil."); } finally { setIsProcessing(false); }
+  };
 
   if (!isLoggedIn) {
     return (
@@ -237,7 +341,7 @@ const App = () => {
         <div style={{ backgroundColor: 'white', padding: isMobile ? '30px 20px' : '40px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', width: '100%', maxWidth: '350px' }}>
            <div style={{ textAlign: 'center', marginBottom: '30px' }}><div style={{ fontSize: '45px', marginBottom: '10px' }}>🏪</div><h2 style={{ margin: 0, color: '#1e293b', fontSize: '24px' }}>Indra Jaya Pusat</h2></div>
            <form onSubmit={handleLogin}>
-              <div style={{ marginBottom: '15px' }}><label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Username (bos/kemal/syarip)</label><input type="text" value={username} onChange={e=>setUsername(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#1e293b', backgroundColor: 'white' }} required /></div>
+              <div style={{ marginBottom: '15px' }}><label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>Username</label><input type="text" value={username} onChange={e=>setUsername(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#1e293b', backgroundColor: 'white' }} required /></div>
               <div style={{ marginBottom: '25px' }}><label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: 'bold', color: '#1e293b' }}>PIN</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', color: '#1e293b', backgroundColor: 'white' }} required /></div>
               <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Masuk Sistem</button>
            </form>
@@ -249,7 +353,6 @@ const App = () => {
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', fontFamily: "'Segoe UI', Roboto, sans-serif", backgroundColor: '#f3f4f6' }}>
       
-      {/* SIDEBAR PC */}
       {!isMobile && (
         <div style={{ width: '260px', backgroundColor: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '25px 20px', display: 'flex', alignItems: 'center', gap: '15px' }}><div style={{ backgroundColor: '#3b82f6', width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🏪</div><div><h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>Indra Jaya</h2><div style={{ fontSize: '12px', color: '#10b981', fontWeight: 'bold' }}>Role: {role}</div></div></div>
@@ -279,7 +382,6 @@ const App = () => {
 
         <div style={{ flex: 1, overflow: 'hidden', padding: isMobile ? '10px' : '20px 30px', backgroundImage: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)' }}>
           
-          {/* TAB DASHBOARD (KHUSUS OWNER) */}
           {activeTab === 'DASHBOARD' && role === 'OWNER' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
               <div style={{ fontSize: '50px', marginBottom: '20px' }}>📊</div>
@@ -298,8 +400,10 @@ const App = () => {
                       <div style={{ width: '45px', height: '45px', backgroundColor: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>💡</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px', color: '#1e293b' }}>{p.nama}</div>
-                        <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '15px' }}>Rp {p.harga.toLocaleString('id-ID')}</div>
-                        {/* Privasi Sisa Stok Kasir: Sisa stok tidak dirender di UI kasir sesuai request */}
+                        <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '15px' }}>
+                          Rp {Number(p.harga).toLocaleString('id-ID')}
+                        </div>
+                        {p.hargaGrosir > 0 && <span style={{fontSize: '10px', backgroundColor: '#fef08a', color: '#854d0e', padding: '2px 5px', borderRadius: '4px', display: 'inline-block', marginTop: '4px'}}>Tersedia Grosir</span>}
                       </div>
                     </div>
                   ))}
@@ -307,14 +411,14 @@ const App = () => {
               </div>
 
               <div style={{ height: isMobile ? '50%' : '100%', width: isMobile ? '100%' : '360px', backgroundColor: 'white', borderRadius: '16px', display: 'flex', flexDirection: 'column', flexShrink: 0, border: '1px solid #e2e8f0' }}>
-                
-                {/* 3. MULTI-HARGA PELANGGAN */}
                 <div style={{ padding: '12px 15px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3 style={{ margin: 0, fontSize: '15px', color: '#1e293b' }}>🛒 Keranjang</h3>
-                  <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} style={{ padding: '5px', borderRadius: '5px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 'bold', backgroundColor: tipePelanggan === 'MEMBER' ? '#fef08a' : '#f1f5f9' }}>
-                    <option value="UMUM">UMUM (Ecer)</option>
-                    <option value="MEMBER">MEMBER (Grosir)</option>
-                  </select>
+                  {isGrosirAvailable && (
+                    <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} style={{ padding: '5px', borderRadius: '5px', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 'bold', backgroundColor: tipePelanggan === 'MEMBER' ? '#fef08a' : '#f1f5f9', cursor: 'pointer', outline: 'none' }}>
+                      <option value="UMUM">UMUM (Ecer)</option>
+                      <option value="MEMBER">MEMBER (Grosir)</option>
+                    </select>
+                  )}
                 </div>
 
                 <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
@@ -327,7 +431,10 @@ const App = () => {
                           <input type="number" step="any" value={k.qty} onChange={(e) => ubahQtyKetikan(k.kode, e.target.value)} onBlur={(e) => validasiQty(k.kode, e.target.value)} style={{ width: '45px', textAlign: 'center', border: 'none', outline: 'none', fontWeight: 'bold', fontSize: '13px', backgroundColor: 'white', color: '#1e293b' }} />
                           <button onClick={() => ubahQty(k.kode, 1)} style={{ padding: '6px 12px', border: 'none', background: '#f1f5f9', color: '#1e293b', cursor: 'pointer', fontWeight: 'bold' }}>+</button>
                         </div>
-                        <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '14px' }}>Rp {(k.harga * (parseFloat(k.qty)||0)).toLocaleString('id-ID')}</div>
+                        <div style={{ textAlign: 'right' }}>
+                           <div style={{ color: '#10b981', fontWeight: 'bold', fontSize: '14px' }}>Rp {(getHargaAktif(k) * (parseFloat(k.qty)||0)).toLocaleString('id-ID')}</div>
+                           {tipePelanggan === 'MEMBER' && k.hargaGrosir > 0 && <div style={{fontSize: '10px', color: '#d97706', marginTop: '2px'}}>(Harga Grosir)</div>}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -371,13 +478,17 @@ const App = () => {
                 <button onClick={prosesInputSaldo} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>💰 Input Saldo Awal</button>
                 <button onClick={prosesPengeluaran} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>💸 Input Pengeluaran</button>
                 <button onClick={prosesTutupKasir} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>🛑 Tutup Kasir & Cetak</button>
+                {role === 'OWNER' && (
+                  <button onClick={prosesUpdateHarga} disabled={isProcessing} style={{ padding: '15px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', marginTop: '20px' }}>
+                    🏷️ Ubah Harga Jual (Ecer)
+                  </button>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* BOTTOM NAV HP */}
       {isMobile && (
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'white', display: 'flex', justifyContent: 'space-around', padding: '10px 5px', zIndex: 100, borderTop: '1px solid #e2e8f0', boxShadow: '0 -2px 10px rgba(0,0,0,0.05)' }}>
           {role === 'OWNER' && (<button onClick={() => setActiveTab('DASHBOARD')} style={{ background: 'none', border: 'none', color: activeTab === 'DASHBOARD' ? '#3b82f6' : '#94a3b8', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 'bold' }}><span style={{ fontSize: '20px' }}>📊</span>Pusat</button>)}
