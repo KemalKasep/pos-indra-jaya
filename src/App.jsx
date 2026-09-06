@@ -411,108 +411,108 @@ const App = () => {
       {/* CONTAINER KONTEN UTAMA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: isMobile ? '65px' : '0' }}>
         
-        {/* NOTIFIKASI STOK UNDER 10 (GLOBAL BANNER) */}
+        {/* NOTIFIKASI STOK UNDER 10 */}
         {produkKritis.length > 0 && (role === 'KASIR' || role === 'OWNER') && (
-          <div style={{ backgroundColor: colors.danger, color: 'white', padding: '10px 15px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', animation: 'pulse 2s infinite', flexShrink: 0 }}>
-            <span>⚠️ PERINGATAN: Terdapat {produkKritis.length} macam barang dengan stok menipis (Di bawah 10 pcs). {role==='OWNER' && 'Cek Order Sales di Dashboard!'}</span>
+          <div style={{ backgroundColor: colors.danger, color: 'white', padding: '8px 15px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}>
+            ⚠️ Terdapat {produkKritis.length} barang dengan stok menipis (&lt; 10 pcs). {role==='OWNER' && 'Cek Order Sales di Dashboard!'}
           </div>
         )}
 
         {/* HEADER MOBILE */}
         {isMobile && (
-          <div style={{ padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg, flexShrink: 0 }}>
+          <div style={{ padding: '10px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg, flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ position: 'relative', width: '50px', height: '50px' }}>
+              <div style={{ position: 'relative', width: '40px', height: '40px' }}>
                 <input type="file" accept="image/*" id="profileUploadMobile" style={{ display: 'none' }} onChange={handleImageUpload} />
-                <label htmlFor="profileUploadMobile" style={{ cursor: 'pointer', display: 'block', width: '100%', height: '100%', borderRadius: '50%', border: `2px solid ${colors.primary}`, padding: '2px', boxShadow: `0 0 12px ${colors.primary}66` }}>
+                <label htmlFor="profileUploadMobile" style={{ cursor: 'pointer', display: 'block', width: '100%', height: '100%', borderRadius: '50%', border: `2px solid ${colors.primary}`, padding: '2px', boxShadow: `0 0 10px ${colors.primary}66` }}>
                   <img src={profilePic} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 </label>
               </div>
-              <div><h1 style={{ margin: 0, fontSize: '20px', color: colors.textMain }}>Hai, {username} 👋</h1><div style={{ fontSize: '13px', color: colors.textMuted }}>Semangat hari ini! 💛</div></div>
+              <div><h1 style={{ margin: 0, fontSize: '16px', color: colors.textMain }}>Hai, {username}</h1></div>
             </div>
-            <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 'bold', fontSize: '18px', color: colors.primary }}>{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div></div>
+            <div style={{ textAlign: 'right', fontWeight: 'bold', fontSize: '16px', color: colors.primary }}>{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div>
           </div>
         )}
 
-        {/* WRAPPER TAB (PENTING: flex: 1, minHeight: 0 agar child bisa scroll) */}
+        {/* WRAPPER TAB FLEKSIBEL */}
         <div style={{ flex: 1, overflow: 'hidden', padding: isMobile ? '0' : '20px', display: 'flex', flexDirection: 'column' }}>
           
-          {/* ======================= TAB KASIR ======================= */}
+          {/* ======================= TAB KASIR (FIX LAYOUT) ======================= */}
           {activeTab === 'KASIR' && (role === 'KASIR' || role === 'OWNER') && (
             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flex: 1, minHeight: 0, gap: isMobile ? '0' : '20px' }}>
               
-              {/* AREA KATALOG (FLEX 1, BISA SCROLL) */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: isMobile ? '10px 15px 0' : '0 20px 0 0' }}>
-                <div style={{ display: 'flex', backgroundColor: colors.panel, borderRadius: '16px', padding: '5px', border: `1px solid ${colors.panelBorder}`, marginBottom: '15px', flexShrink: 0 }}>
-                  <span style={{ padding: '10px 15px', color: colors.textMuted }}>🔍</span>
-                  <input ref={scannerRef} type="text" placeholder="Cari nama / scan barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing} style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', fontSize: '15px' }} />
-                  <button style={{ backgroundColor: colors.primary, color: '#000', border: 'none', borderRadius: '12px', padding: '0 20px', fontWeight: 'bold', fontSize: '20px' }}>[-]</button>
+              {/* AREA KATALOG (Diberi flex: 1 agar mengisi ruang sisa di atas keranjang) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: isMobile ? '10px 15px 0' : '0' }}>
+                <div style={{ display: 'flex', backgroundColor: colors.panel, borderRadius: '12px', padding: '4px', border: `1px solid ${colors.panelBorder}`, marginBottom: '10px', flexShrink: 0 }}>
+                  <span style={{ padding: '8px 12px', color: colors.textMuted }}>🔍</span>
+                  <input ref={scannerRef} type="text" placeholder="Cari nama / scan barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing} style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', fontSize: '14px' }} />
                 </div>
 
                 <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '10px' }}>
                   {produk.length === 0 ? <p style={{ color: colors.textMuted, textAlign: 'center', marginTop: '20px' }}>Memuat data produk...</p> : produkDifilter.map(p => (
-                    <div key={p.kode} style={{ backgroundColor: colors.panel, borderRadius: '16px', padding: '15px', border: `1px solid ${colors.panelBorder}`, display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '12px' }}>
-                      <div style={{ width: '55px', height: '55px', backgroundColor: 'white', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>💡</div>
+                    <div key={p.kode} style={{ backgroundColor: colors.panel, borderRadius: '12px', padding: '10px', border: `1px solid ${colors.panelBorder}`, display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <div style={{ width: '40px', height: '40px', backgroundColor: 'white', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>💡</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 'bold', fontSize: '16px', color: colors.textMain }}>{p.nama}</div>
-                        <div style={{ color: colors.primary, fontWeight: 'bold', fontSize: '15px', marginTop: '4px' }}>Rp {Number(p.harga).toLocaleString('id-ID')}</div>
-                        {p.hargaGrosir > 0 && <span style={{fontSize: '10px', backgroundColor: colors.btnBlue, color: colors.primary, padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '5px'}}>Bisa Grosir</span>}
+                        <div style={{ fontWeight: 'bold', fontSize: '14px', color: colors.textMain }}>{p.nama}</div>
+                        <div style={{ color: colors.primary, fontWeight: 'bold', fontSize: '13px', marginTop: '2px' }}>Rp {Number(p.harga).toLocaleString('id-ID')}</div>
                       </div>
-                      <button onClick={() => tambahKeKeranjang(p)} style={{ backgroundColor: 'transparent', border: `2px solid ${colors.btnBlue}`, color: colors.primary, width: '45px', height: '45px', borderRadius: '12px', fontSize: '24px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                      <button onClick={() => tambahKeKeranjang(p)} style={{ backgroundColor: 'transparent', border: `2px solid ${colors.btnBlue}`, color: colors.primary, width: '35px', height: '35px', borderRadius: '8px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* AREA KERANJANG (TINGGI FIX 48% DI HP, AGAR KATALOG KEBAGIAN 52%) */}
-              <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, minHeight: 0, height: isMobile ? '48%' : '100%', width: isMobile ? '100%' : '380px', backgroundColor: colors.panel, borderRadius: isMobile ? '24px 24px 0 0' : '20px', border: `1px solid ${colors.panelBorder}`, padding: '15px 20px', boxShadow: isMobile ? `0 -5px 20px rgba(0,0,0,0.5)` : 'none' }}>
+              {/* AREA KERANJANG (Tinggi 45% di HP, tapi bagian bawahnya super ringkas) */}
+              <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '50%' : '100%', width: isMobile ? '100%' : '350px', backgroundColor: colors.panel, borderRadius: isMobile ? '20px 20px 0 0' : '20px', border: `1px solid ${colors.panelBorder}`, padding: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', color: colors.textMain, display: 'flex', alignItems: 'center', gap: '8px' }}>🛒 KERANJANG</h3>
+                  <h3 style={{ margin: 0, fontSize: '14px', color: colors.textMain }}>🛒 KERANJANG ({keranjang.reduce((sum, i) => sum + parseFloat(i.qty||0), 0)})</h3>
                   {isGrosirAvailable && (
-                    <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} style={{ padding: '5px', borderRadius: '8px', border: `1px solid ${colors.primary}`, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.bg, color: colors.primary, cursor: 'pointer', outline: 'none' }}>
+                    <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} style={{ padding: '4px', borderRadius: '6px', border: `1px solid ${colors.primary}`, fontSize: '11px', fontWeight: 'bold', backgroundColor: colors.bg, color: colors.primary, outline: 'none' }}>
                       <option value="UMUM">UMUM (Ecer)</option>
                       <option value="MEMBER">MEMBER (Grosir)</option>
                     </select>
                   )}
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto', marginBottom: '10px', minHeight: 0 }}>
+                <div style={{ flex: 1, overflowY: 'auto', marginBottom: '10px', minHeight: '50px' }}>
                   {keranjang.map(k => (
-                    <div key={k.kode} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '8px', marginBottom: '8px' }}>
+                    <div key={k.kode} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '6px', marginBottom: '6px' }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: colors.textMain }}>{k.nama}</div>
-                        <div style={{ fontSize: '13px', color: colors.primary }}>{formatRp(getHargaAktif(k))}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: colors.textMain }}>{k.nama}</div>
+                        <div style={{ fontSize: '12px', color: colors.primary }}>{formatRp(getHargaAktif(k))}</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '8px', border: `1px solid ${colors.panelBorder}` }}>
-                          <button onClick={() => ubahQty(k.kode, -1)} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>-</button>
-                          <input type="number" step="any" value={k.qty} onChange={(e) => ubahQtyKetikan(k.kode, e.target.value)} onBlur={(e) => validasiQty(k.kode, e.target.value)} style={{ width: '30px', textAlign: 'center', border: 'none', background: 'transparent', color: colors.textMain, outline: 'none', fontWeight: 'bold' }} />
-                          <button onClick={() => ubahQty(k.kode, 1)} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>+</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '6px', border: `1px solid ${colors.panelBorder}` }}>
+                          <button onClick={() => ubahQty(k.kode, -1)} style={{ padding: '2px 8px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '14px', fontWeight: 'bold' }}>-</button>
+                          <input type="number" step="any" value={k.qty} onChange={(e) => ubahQtyKetikan(k.kode, e.target.value)} onBlur={(e) => validasiQty(k.kode, e.target.value)} style={{ width: '25px', textAlign: 'center', border: 'none', background: 'transparent', color: colors.textMain, outline: 'none', fontWeight: 'bold', fontSize: '12px' }} />
+                          <button onClick={() => ubahQty(k.kode, 1)} style={{ padding: '2px 8px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '14px', fontWeight: 'bold' }}>+</button>
                         </div>
-                        <button onClick={() => hapusItem(k.kode)} style={{ background: 'none', border: 'none', color: colors.danger, fontSize: '18px' }}>🗑</button>
+                        <button onClick={() => hapusItem(k.kode)} style={{ background: 'none', border: 'none', color: colors.danger, fontSize: '16px' }}>🗑</button>
                       </div>
                     </div>
                   ))}
                 </div>
 
+                {/* BAGIAN CHECKOUT ULTRA-COMPACT */}
                 <div style={{ borderTop: `1px solid ${colors.panelBorder}`, paddingTop: '10px', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '12px', border: `1px solid ${colors.panelBorder}`, padding: '4px', marginBottom: '10px' }}>
-                    <div style={{ backgroundColor: colors.primary, color: '#000', padding: '6px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold' }}>%</div>
-                    <span style={{ padding: '0 10px', color: colors.textMuted, fontSize: '13px', flex: 1 }}>Diskon (Rp)</span>
-                    <input type="number" value={diskon === 0 ? '' : diskon} onChange={e => setDiskon(Number(e.target.value))} style={{ width: '90px', backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', textAlign: 'right', paddingRight: '10px', fontSize: '16px', fontWeight: 'bold' }} placeholder="0" />
-                  </div>
-
+                  
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <span style={{ fontSize: '16px', fontWeight: 'bold', color: colors.textMain }}>TOTAL</span>
-                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: colors.primary }}>{formatRp(totalAkhir)}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '8px', border: `1px solid ${colors.panelBorder}`, padding: '2px 8px' }}>
+                      <span style={{ color: colors.textMuted, fontSize: '11px', marginRight: '5px' }}>Diskon:</span>
+                      <input type="number" value={diskon === 0 ? '' : diskon} onChange={e => setDiskon(Number(e.target.value))} style={{ width: '60px', backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', textAlign: 'right', fontSize: '14px', fontWeight: 'bold' }} placeholder="0" />
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '12px', color: colors.textMuted, marginRight: '5px' }}>Total:</span>
+                      <span style={{ fontSize: '18px', fontWeight: 'bold', color: colors.primary }}>{formatRp(totalAkhir)}</span>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                    <button onClick={() => setPembayaran('CASH')} style={{ flex: 1, padding: '10px', backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px' }}>💵 CASH</button>
-                    <button onClick={() => setPembayaran('TF')} style={{ flex: 1, padding: '10px', backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px' }}>💳 TF</button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => setPembayaran('CASH')} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💵 CASH</button>
+                    <button onClick={() => setPembayaran('TF')} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💳 TF</button>
+                    <button onClick={prosesCheckout} disabled={isProcessing || keranjang.length === 0} style={{ flex: 2, padding: '8px', backgroundColor: isProcessing || keranjang.length === 0 ? colors.btnBlue : colors.success, color: 'white', fontWeight: 'bold', border: 'none', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}>BAYAR</button>
                   </div>
                   
-                  <button onClick={prosesCheckout} disabled={isProcessing || keranjang.length === 0} style={{ width: '100%', padding: '12px', backgroundColor: isProcessing || keranjang.length === 0 ? colors.btnBlue : colors.primary, color: isProcessing || keranjang.length === 0 ? colors.textMuted : '#000', fontWeight: 'bold', border: 'none', borderRadius: '10px', fontSize: '16px', cursor: 'pointer' }}>BAYAR SEKARANG</button>
                 </div>
               </div>
             </div>
@@ -545,6 +545,7 @@ const App = () => {
                     </div>
                   </div>
 
+                  {/* TABEL ORDER SALES (RESTOK) */}
                   <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.danger}`, marginBottom: '25px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                       <h3 style={{ margin: 0, color: colors.primary, fontSize: '16px' }}>📋 Order Sales (Stok &lt; 10)</h3>
