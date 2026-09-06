@@ -149,6 +149,16 @@ const App = () => {
     }
   }, [activeTab, isLoggedIn, role]);
 
+  // LOGIKA PENGELOMPOKAN ORDER SALES (Khusus Dashboard Owner)
+  const produkKritis = produk.filter(p => Number(p.stok) < 10);
+  const orderSalesMap = {};
+  produkKritis.forEach(p => {
+    const sales = (p.namaSales && p.namaSales.trim() !== '') ? p.namaSales.trim() : 'Tanpa Sales';
+    if (!orderSalesMap[sales]) orderSalesMap[sales] = [];
+    orderSalesMap[sales].push(p);
+  });
+  const orderSalesList = Object.entries(orderSalesMap).sort((a, b) => b[1].length - a[1].length);
+
   const isGrosirAvailable = produk.some(p => p.hargaGrosir && Number(p.hargaGrosir) > 0);
   const getHargaAktif = (item) => (tipePelanggan === 'MEMBER' && item.hargaGrosir && Number(item.hargaGrosir) > 0) ? Number(item.hargaGrosir) : Number(item.harga);
 
@@ -178,9 +188,6 @@ const App = () => {
   const subtotal = keranjang.reduce((sum, item) => sum + (getHargaAktif(item) * (parseFloat(item.qty)||0)), 0);
   const totalAkhir = Math.max(0, subtotal - diskon);
 
-  // ==============================================================
-  // UPDATE BARU: STRUK DENGAN UANG DIBAYAR & KEMBALIAN
-  // ==============================================================
   const formatCetakStruk = (noStruk, itemsData, sb, ds, tot, tp, bayar = tot, kembali = 0) => {
     const w = window.open('', '_blank', 'width=300,height=600');
     if (w) {
@@ -190,12 +197,7 @@ const App = () => {
         htmlStruk += `<tr><td colspan="3">${item.nama.substring(0, 18)}</td></tr><tr><td>${item.qty}x</td><td>${hrg.toLocaleString('id-ID')}</td><td style="text-align: right;">${((item.qty * hrg) || item.total).toLocaleString('id-ID')}</td></tr>`; 
       });
       htmlStruk += `</table><div style="border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px;"><table style="width: 100%; font-size: 12px;"><tr><td>Subtotal</td><td style="text-align: right;">${sb.toLocaleString('id-ID')}</td></tr><tr><td>Diskon</td><td style="text-align: right;">${ds.toLocaleString('id-ID')}</td></tr><tr style="font-weight: bold; font-size: 14px;"><td>TOTAL</td><td style="text-align: right;">${tot.toLocaleString('id-ID')}</td></tr>`;
-      
-      // TAMPILKAN UANG TUNAI & KEMBALIAN DI STRUK JIKA CASH
-      if (tp === 'CASH') {
-        htmlStruk += `<tr><td colspan="2" style="border-top: 1px dashed #000; margin-top: 2px; padding-top: 2px;"></td></tr><tr><td>Tunai</td><td style="text-align: right;">${bayar.toLocaleString('id-ID')}</td></tr><tr><td>Kembali</td><td style="text-align: right;">${kembali.toLocaleString('id-ID')}</td></tr>`;
-      }
-      
+      if (tp === 'CASH') htmlStruk += `<tr><td colspan="2" style="border-top: 1px dashed #000; margin-top: 2px; padding-top: 2px;"></td></tr><tr><td>Tunai</td><td style="text-align: right;">${bayar.toLocaleString('id-ID')}</td></tr><tr><td>Kembali</td><td style="text-align: right;">${kembali.toLocaleString('id-ID')}</td></tr>`;
       htmlStruk += `</table></div><div style="text-align: center; margin-top: 10px;">Terima Kasih</div></div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),500);}</script>`;
       w.document.write(htmlStruk); w.document.close();
     }
@@ -205,24 +207,18 @@ const App = () => {
     if (keranjang.length === 0) return alert('Keranjang kosong!');
     setIsProcessing(true);
     
-    // UPDATE BARU: INPUT NOMINAL UANG & KEMBALIAN
     let uangBayarCASH = totalAkhir;
     let uangKembalian = 0;
 
     if (pembayaran === 'CASH') {
       const inputBayar = prompt(`Total Belanja: Rp ${totalAkhir.toLocaleString('id-ID')}\n\nMasukkan NOMINAL UANG TUNAI dari pelanggan:`);
-      if (inputBayar === null) {
-        setIsProcessing(false);
-        return; // Batal Checkout
-      }
+      if (inputBayar === null) { setIsProcessing(false); return; }
       const angkaBayar = parseInt(inputBayar.replace(/\D/g, ''));
       if (isNaN(angkaBayar) || angkaBayar < totalAkhir) {
         alert(`Transaksi Batal!\nUang tidak cukup atau format salah.\nMinimal Bayar: Rp ${totalAkhir.toLocaleString('id-ID')}`);
-        setIsProcessing(false);
-        return;
+        setIsProcessing(false); return;
       }
-      uangBayarCASH = angkaBayar;
-      uangKembalian = angkaBayar - totalAkhir;
+      uangBayarCASH = angkaBayar; uangKembalian = angkaBayar - totalAkhir;
     }
 
     const validKeranjang = keranjang.map(k => ({ ...k, qty: parseFloat(k.qty)||1, harga: getHargaAktif(k) }));
@@ -238,7 +234,6 @@ const App = () => {
       let msg = `INTERNET TERPUTUS! Transaksi diamankan ke Mode Offline.\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
       if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
       msg += `\n\nIngin mencetak struk sekarang?`;
-      
       if (window.confirm(msg)) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
       
       setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
@@ -252,7 +247,6 @@ const App = () => {
         let msg = `Transaksi Berhasil!\nNo Struk: ${result.struk}\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
         if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
         msg += `\n\nIngin mencetak struk sekarang?`;
-
         if (window.confirm(msg)) formatCetakStruk(result.struk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
         setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       }
@@ -266,7 +260,6 @@ const App = () => {
       let msg = `Koneksi gagal! Transaksi dialihkan ke Mode Offline.\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
       if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
       msg += `\n\nIngin mencetak struk sekarang?`;
-      
       if (window.confirm(msg)) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
       setKeranjang([]); setDiskon(0); setKeyword('');
     } finally { setIsProcessing(false); }
@@ -297,7 +290,6 @@ const App = () => {
 
     const hargaBaru = prompt(`Ubah harga untuk:\n${barang.nama}\n(Harga saat ini: Rp ${Number(barang.harga).toLocaleString('id-ID')})\n\nMasukkan HARGA BARU (Angka saja):`);
     if (!hargaBaru) return;
-
     const angkaBaru = parseInt(hargaBaru.replace(/\D/g, ''));
     if (isNaN(angkaBaru)) return alert("Format harga salah, harus berupa angka!");
 
@@ -314,7 +306,6 @@ const App = () => {
     } catch (e) { alert("Error jaringan saat mengubah harga."); } finally { setIsProcessing(false); }
   };
 
-  // FITUR-FITUR UTILITY (TETAP AMAN)
   const prosesInputSaldo = async () => {
     const nominal = prompt("Masukkan jumlah Saldo Awal (CASH) hari ini:\nContoh: 150000");
     if (!nominal) return;
@@ -344,23 +335,19 @@ const App = () => {
     if (offlineQueue > 0) return alert("Mohon sinkronkan data Offline terlebih dahulu sebelum Tutup Kasir!");
     const inputFisik = prompt("TUTUP KASIR\nHitung dan masukkan total UANG FISIK (CASH) di laci saat ini:\n(Contoh: 1500000)");
     if (inputFisik === null || inputFisik.trim() === "") return; 
-    
     const kasFisik = parseInt(inputFisik.replace(/\D/g, ''));
     if (isNaN(kasFisik)) return alert("Input dibatalkan! Uang fisik harus berupa angka.");
-
     if(!window.confirm(`Uang Fisik diinput: Rp ${kasFisik.toLocaleString('id-ID')}\nYakin ingin menyelesaikan hari dan Tutup Kasir sekarang?`)) return;
 
     setIsProcessing(true);
     try {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) });
       const result = await response.json();
-      
       if (result.status === "success" && result.dataFinal) {
         const { saldoAwal, omzetCash, omzetTF, kasSeharusnya } = result.dataFinal;
         const selisih = kasFisik - Number(kasSeharusnya);
         const warnaSelisih = selisih < 0 ? 'red' : (selisih > 0 ? 'green' : 'black');
         const teksSelisih = selisih < 0 ? `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}` : (selisih > 0 ? `+ Rp ${selisih.toLocaleString('id-ID')}` : 'Rp 0 (BALANCE)');
-        
         const w = window.open('', '_blank', 'width=500,height=750');
         if (w) {
           const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p><hr style="border-top: 2px dashed #000; margin: 20px 0;"/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr></table><hr style="border-top: 2px solid #000; margin: 20px 0;"/><table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;"><tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr><tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr><tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr></table><p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG.</p></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
@@ -520,7 +507,7 @@ const App = () => {
             </div>
           )}
 
-          {/* ======================= TAB DASHBOARD OWNER ======================= */}
+          {/* ======================= TAB DASHBOARD OWNER & ORDER SALES ======================= */}
           {activeTab === 'DASHBOARD' && role === 'OWNER' && (
             <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '15px' : '0' }}>
               <h2 style={{ color: colors.primary, marginBottom: '20px' }}>📊 Dashboard Pusat</h2>
@@ -533,19 +520,16 @@ const App = () => {
               ) : dashboardData ? (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '15px', marginBottom: '25px' }}>
-                    
                     <div style={{ backgroundColor: colors.btnBlue, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.panelBorder}` }}>
                       <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '5px' }}>TOTAL PENJUALAN</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.totalPenjualan)}</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}><span>Cash: {formatRp(dashboardData.ringkasan?.cash)}</span><span>TF: {formatRp(dashboardData.ringkasan?.tf)}</span></div>
                     </div>
-                    
                     <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.success}` }}>
                       <div style={{ fontSize: '13px', color: colors.success, marginBottom: '5px' }}>ESTIMASI KAS FISIK</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.kasFisik)}</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}><span>Pengeluaran: {formatRp(dashboardData.ringkasan?.pengeluaran)}</span></div>
                     </div>
-                    
                     <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.primary}` }}>
                       <div style={{ fontSize: '13px', color: colors.primary, marginBottom: '5px' }}>TOTAL ASET (Nilai Jual)</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.totalAset)}</div>
@@ -594,34 +578,64 @@ const App = () => {
               ) : (
                 <div style={{ textAlign: 'center', color: colors.textMuted, marginTop: '50px' }}>Gagal memuat data Dashboard. Pastikan Google Sheets Dashboard Anda memiliki data.</div>
               )}
+
+              {/* FITUR BARU: ORDER SALES (RESTOK BARANG) */}
+              <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0, color: colors.primary, fontSize: '16px' }}>📋 Order Sales (Stok &lt; 10)</h3>
+                  <span style={{ backgroundColor: colors.danger, color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{produkKritis.length} Item Perlu Restok</span>
+                </div>
+                
+                {orderSalesList.length === 0 ? (
+                  <div style={{ color: colors.textMuted, textAlign: 'center', padding: '20px 0' }}>Semua stok aman (di atas 10).</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '15px' }}>
+                    {orderSalesList.map(([salesName, items]) => (
+                      <div key={salesName} style={{ backgroundColor: colors.bg, border: `1px solid ${colors.panelBorder}`, borderRadius: '12px', padding: '15px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '10px', marginBottom: '10px' }}>
+                          <span style={{ fontWeight: 'bold', color: colors.textMain, fontSize: '15px' }}>👤 {salesName}</span>
+                          <span style={{ color: colors.primary, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.btnBlue, padding: '4px 8px', borderRadius: '6px' }}>{items.length} Produk</span>
+                        </div>
+                        <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '5px' }}>
+                          {items.map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px', color: colors.textMuted }}>
+                              <span>{item.nama}</span>
+                              <span style={{ color: Number(item.stok) < 5 ? colors.danger : '#f59e0b', fontWeight: 'bold' }}>Sisa: {item.stok}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ height: '30px' }}></div>
             </div>
           )}
 
-          {/* ======================= TAB RIWAYAT (DIKEMBALIKAN FULL 5 KOTAK!) ======================= */}
+          {/* ======================= TAB RIWAYAT ======================= */}
           {activeTab === 'RIWAYAT' && (
             <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '15px' : '0' }}>
-              
-              {/* 5 KOTAK LAPORAN DIKEMBALIKAN */}
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
                 <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.panelBorder}` }}>
                   <div style={{ fontSize: '11px', marginBottom: '5px', color: colors.textMuted }}>TOTAL OMZET</div>
-                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: colors.primary }}>{formatRp(riwayat.reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: colors.primary }}>{formatRp(riwayat.reduce((sum, r) => sum + (r.total || 0), 0))}</div>
                 </div>
                 <div style={{ backgroundColor: '#064e3b', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.success}` }}>
                   <div style={{ fontSize: '11px', marginBottom: '5px', color: '#6ee7b7' }}>KAS SEHARUSNYA</div>
-                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(Number(ringkasan?.saldoAwal || 0) + riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + Number(r.total || 0), 0))}</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: 'white' }}>{formatRp(Number(ringkasan?.saldoAwal || 0) + riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + Number(r.total || 0), 0))}</div>
                 </div>
                 <div style={{ backgroundColor: '#4c1d95', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid #7c3aed` }}>
                   <div style={{ fontSize: '11px', marginBottom: '5px', color: '#c4b5fd' }}>SALDO AWAL</div>
-                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(ringkasan?.saldoAwal || 0)}</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: 'white' }}>{formatRp(ringkasan?.saldoAwal || 0)}</div>
                 </div>
                 <div style={{ backgroundColor: '#78350f', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid #d97706` }}>
                   <div style={{ fontSize: '11px', marginBottom: '5px', color: '#fcd34d' }}>OMZET CASH</div>
-                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
                 </div>
                 <div style={{ backgroundColor: '#1e3a8a', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.btnBlue}` }}>
                   <div style={{ fontSize: '11px', marginBottom: '5px', color: '#bfdbfe' }}>OMZET TF</div>
-                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
                 </div>
               </div>
 
@@ -635,7 +649,7 @@ const App = () => {
             </div>
           )}
 
-          {/* ======================= TAB UTILITY (TETAP AMAN) ======================= */}
+          {/* ======================= TAB UTILITY ======================= */}
           {activeTab === 'UTILITY' && (
             <div style={{ padding: isMobile ? '15px' : '0' }}>
               <div style={{ backgroundColor: colors.panel, padding: '25px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, maxWidth: '600px' }}>
