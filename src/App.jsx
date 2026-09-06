@@ -48,17 +48,16 @@ const App = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 1. UPDATE KTP DIGITAL UNTUK SEMUA ROLE
   useEffect(() => {
-    const savedSession = localStorage.getItem('owner_session');
+    const savedSession = localStorage.getItem('pos_session');
     if (savedSession) {
       const sessionData = JSON.parse(savedSession);
-      if (sessionData.role === 'OWNER') {
-        setUsername(sessionData.username);
-        setRole('OWNER');
-        setActiveTab('DASHBOARD');
-        setIsLoggedIn(true);
-        loadProfilePic(sessionData.username);
-      }
+      setUsername(sessionData.username);
+      setRole(sessionData.role);
+      setActiveTab(sessionData.role === 'CABANG' ? 'KATALOG' : (sessionData.role === 'OWNER' ? 'DASHBOARD' : 'KASIR'));
+      setIsLoggedIn(true);
+      loadProfilePic(sessionData.username);
     }
   }, []);
 
@@ -114,14 +113,15 @@ const App = () => {
       setActiveTab(r === 'CABANG' ? 'KATALOG' : (r === 'OWNER' ? 'DASHBOARD' : 'KASIR')); 
       setIsLoggedIn(true);
       loadProfilePic(username);
-      if(r === 'OWNER') localStorage.setItem('owner_session', JSON.stringify({ username, role: r }));
+      // SIMPAN SESI UNTUK SEMUA ROLE AGAR TIDAK PERLU LOGIN TERUS
+      localStorage.setItem('pos_session', JSON.stringify({ username, role: r }));
     } else { alert('Username atau PIN salah!'); }
   };
 
   const handleLogout = () => { 
     if(window.confirm('Yakin ingin keluar?')) { 
       setIsLoggedIn(false); setRole(null); setUsername(''); setPassword(''); setKeranjang([]); setProfilePic(null);
-      localStorage.removeItem('owner_session'); 
+      localStorage.removeItem('pos_session'); 
     } 
   };
 
@@ -149,11 +149,11 @@ const App = () => {
     }
   }, [activeTab, isLoggedIn, role]);
 
-  // LOGIKA PENGELOMPOKAN ORDER SALES (Khusus Dashboard Owner)
+  // LOGIKA ORDER SALES DAN NOTIFIKASI STOK
   const produkKritis = produk.filter(p => Number(p.stok) < 10);
   const orderSalesMap = {};
   produkKritis.forEach(p => {
-    const sales = (p.namaSales && p.namaSales.trim() !== '') ? p.namaSales.trim() : 'Tanpa Sales';
+    const sales = (p.namaSales && p.namaSales.trim() !== '') ? p.namaSales.trim() : 'Tanpa Sales / Belum Diinput';
     if (!orderSalesMap[sales]) orderSalesMap[sales] = [];
     orderSalesMap[sales].push(p);
   });
@@ -197,7 +197,9 @@ const App = () => {
         htmlStruk += `<tr><td colspan="3">${item.nama.substring(0, 18)}</td></tr><tr><td>${item.qty}x</td><td>${hrg.toLocaleString('id-ID')}</td><td style="text-align: right;">${((item.qty * hrg) || item.total).toLocaleString('id-ID')}</td></tr>`; 
       });
       htmlStruk += `</table><div style="border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px;"><table style="width: 100%; font-size: 12px;"><tr><td>Subtotal</td><td style="text-align: right;">${sb.toLocaleString('id-ID')}</td></tr><tr><td>Diskon</td><td style="text-align: right;">${ds.toLocaleString('id-ID')}</td></tr><tr style="font-weight: bold; font-size: 14px;"><td>TOTAL</td><td style="text-align: right;">${tot.toLocaleString('id-ID')}</td></tr>`;
-      if (tp === 'CASH') htmlStruk += `<tr><td colspan="2" style="border-top: 1px dashed #000; margin-top: 2px; padding-top: 2px;"></td></tr><tr><td>Tunai</td><td style="text-align: right;">${bayar.toLocaleString('id-ID')}</td></tr><tr><td>Kembali</td><td style="text-align: right;">${kembali.toLocaleString('id-ID')}</td></tr>`;
+      if (tp === 'CASH') {
+        htmlStruk += `<tr><td colspan="2" style="border-top: 1px dashed #000; margin-top: 2px; padding-top: 2px;"></td></tr><tr><td>Tunai</td><td style="text-align: right;">${bayar.toLocaleString('id-ID')}</td></tr><tr><td>Kembali</td><td style="text-align: right;">${kembali.toLocaleString('id-ID')}</td></tr>`;
+      }
       htmlStruk += `</table></div><div style="text-align: center; margin-top: 10px;">Terima Kasih</div></div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),500);}</script>`;
       w.document.write(htmlStruk); w.document.close();
     }
@@ -218,7 +220,8 @@ const App = () => {
         alert(`Transaksi Batal!\nUang tidak cukup atau format salah.\nMinimal Bayar: Rp ${totalAkhir.toLocaleString('id-ID')}`);
         setIsProcessing(false); return;
       }
-      uangBayarCASH = angkaBayar; uangKembalian = angkaBayar - totalAkhir;
+      uangBayarCASH = angkaBayar;
+      uangKembalian = angkaBayar - totalAkhir;
     }
 
     const validKeranjang = keranjang.map(k => ({ ...k, qty: parseFloat(k.qty)||1, harga: getHargaAktif(k) }));
@@ -247,6 +250,7 @@ const App = () => {
         let msg = `Transaksi Berhasil!\nNo Struk: ${result.struk}\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
         if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
         msg += `\n\nIngin mencetak struk sekarang?`;
+
         if (window.confirm(msg)) formatCetakStruk(result.struk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
         setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       }
@@ -260,6 +264,7 @@ const App = () => {
       let msg = `Koneksi gagal! Transaksi dialihkan ke Mode Offline.\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
       if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
       msg += `\n\nIngin mencetak struk sekarang?`;
+      
       if (window.confirm(msg)) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
       setKeranjang([]); setDiskon(0); setKeyword('');
     } finally { setIsProcessing(false); }
@@ -290,6 +295,7 @@ const App = () => {
 
     const hargaBaru = prompt(`Ubah harga untuk:\n${barang.nama}\n(Harga saat ini: Rp ${Number(barang.harga).toLocaleString('id-ID')})\n\nMasukkan HARGA BARU (Angka saja):`);
     if (!hargaBaru) return;
+
     const angkaBaru = parseInt(hargaBaru.replace(/\D/g, ''));
     if (isNaN(angkaBaru)) return alert("Format harga salah, harus berupa angka!");
 
@@ -337,17 +343,20 @@ const App = () => {
     if (inputFisik === null || inputFisik.trim() === "") return; 
     const kasFisik = parseInt(inputFisik.replace(/\D/g, ''));
     if (isNaN(kasFisik)) return alert("Input dibatalkan! Uang fisik harus berupa angka.");
+
     if(!window.confirm(`Uang Fisik diinput: Rp ${kasFisik.toLocaleString('id-ID')}\nYakin ingin menyelesaikan hari dan Tutup Kasir sekarang?`)) return;
 
     setIsProcessing(true);
     try {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'tutupKasir', kasFisik: kasFisik }) });
       const result = await response.json();
+      
       if (result.status === "success" && result.dataFinal) {
         const { saldoAwal, omzetCash, omzetTF, kasSeharusnya } = result.dataFinal;
         const selisih = kasFisik - Number(kasSeharusnya);
         const warnaSelisih = selisih < 0 ? 'red' : (selisih > 0 ? 'green' : 'black');
         const teksSelisih = selisih < 0 ? `- Rp ${Math.abs(selisih).toLocaleString('id-ID')}` : (selisih > 0 ? `+ Rp ${selisih.toLocaleString('id-ID')}` : 'Rp 0 (BALANCE)');
+        
         const w = window.open('', '_blank', 'width=500,height=750');
         if (w) {
           const htmlReport = `<div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; color: #000;"><h2 style="text-align: center; margin-bottom: 5px;">LAPORAN TUTUP KASIR</h2><p style="text-align: center; margin-top: 0; color: #555;">Indra Jaya Pusat • ${new Date().toLocaleString('id-ID')}</p><hr style="border-top: 2px dashed #000; margin: 20px 0;"/><table style="width: 100%; font-size: 15px; line-height: 2;"><tr><td>Saldo Awal (Cash)</td><td style="text-align: right; font-weight: bold;">Rp ${(Number(saldoAwal) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Cash</td><td style="text-align: right; font-weight: bold; color: green;">+ Rp ${(Number(omzetCash) || 0).toLocaleString('id-ID')}</td></tr><tr><td>Omzet Penjualan Transfer</td><td style="text-align: right; font-weight: bold; color: blue;">+ Rp ${(Number(omzetTF) || 0).toLocaleString('id-ID')}</td></tr></table><hr style="border-top: 2px solid #000; margin: 20px 0;"/><table style="width: 100%; font-size: 16px; line-height: 2; font-weight: bold;"><tr><td>KAS SEHARUSNYA</td><td style="text-align: right;">Rp ${(Number(kasSeharusnya) || 0).toLocaleString('id-ID')}</td></tr><tr><td>KAS FISIK (LACI)</td><td style="text-align: right; color: #3b82f6;">Rp ${kasFisik.toLocaleString('id-ID')}</td></tr><tr><td>SELISIH</td><td style="text-align: right; color: ${warnaSelisih};">${teksSelisih}</td></tr></table><p style="text-align: center; font-size: 12px; color: #888; margin-top: 40px;">Simpan halaman ini sebagai PDF / JPG.</p></div><script>window.onload = function() { window.print(); setTimeout(() => window.close(), 500); }</script>`;
@@ -361,7 +370,6 @@ const App = () => {
 
   const formatRp = (angka) => { let num = Number(angka); if(isNaN(num)) return "Rp 0"; return "Rp " + num.toLocaleString('id-ID'); };
 
-  // --- LAYAR LOGIN ---
   if (!isLoggedIn) {
     return (
       <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg, padding: '20px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
@@ -377,7 +385,6 @@ const App = () => {
     );
   }
 
-  // --- LAYAR UTAMA ---
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', fontFamily: "'Segoe UI', Roboto, sans-serif", backgroundColor: colors.bg, color: colors.textMain }}>
       
@@ -404,6 +411,13 @@ const App = () => {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: isMobile ? '65px' : '0' }}>
         
+        {/* NOTIFIKASI STOK UNDER 10 (GLOBAL BANNER) */}
+        {produkKritis.length > 0 && (role === 'KASIR' || role === 'OWNER') && (
+          <div style={{ backgroundColor: colors.danger, color: 'white', padding: '10px 15px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', animation: 'pulse 2s infinite' }}>
+            <span>⚠️ PERINGATAN: Terdapat {produkKritis.length} macam barang dengan stok menipis (Di bawah 10 pcs). {role==='OWNER' && 'Cek Order Sales di Dashboard!'}</span>
+          </div>
+        )}
+
         {/* HEADER MOBILE */}
         {isMobile && (
           <div style={{ padding: '20px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg }}>
@@ -413,11 +427,10 @@ const App = () => {
                 <label htmlFor="profileUploadMobile" style={{ cursor: 'pointer', display: 'block', width: '100%', height: '100%', borderRadius: '50%', border: `2px solid ${colors.primary}`, padding: '2px', boxShadow: `0 0 12px ${colors.primary}66` }}>
                   <img src={profilePic} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 </label>
-                <span style={{ position: 'absolute', top: '-5px', left: '-5px', fontSize: '12px' }}>✨</span><span style={{ position: 'absolute', bottom: '-2px', right: '-5px', fontSize: '14px' }}>✨</span>
               </div>
               <div><h1 style={{ margin: 0, fontSize: '20px', color: colors.textMain }}>Hai, {username} 👋</h1><div style={{ fontSize: '13px', color: colors.textMuted }}>Semangat hari ini! 💛</div></div>
             </div>
-            <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 'bold', fontSize: '18px', color: colors.primary }}>{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div><div style={{ fontSize: '11px', color: colors.textMuted }}>{currentTime.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</div></div>
+            <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 'bold', fontSize: '18px', color: colors.primary }}>{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</div></div>
           </div>
         )}
 
@@ -425,17 +438,14 @@ const App = () => {
           
           {/* ======================= TAB KASIR ======================= */}
           {activeTab === 'KASIR' && (role === 'KASIR' || role === 'OWNER') && (
-            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%', gap: isMobile ? '0' : '20px' }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100%', overflow: 'hidden' }}>
               
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: isMobile ? '0 15px' : '0' }}>
+              {/* LIST KATALOG (FLEX 1 AGAR BISA SCROLL MANDIRI DI HP) */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'hidden', padding: isMobile ? '10px 15px 0' : '0 20px 0 0' }}>
                 <div style={{ display: 'flex', backgroundColor: colors.panel, borderRadius: '16px', padding: '5px', border: `1px solid ${colors.panelBorder}`, marginBottom: '15px' }}>
                   <span style={{ padding: '10px 15px', color: colors.textMuted }}>🔍</span>
                   <input ref={scannerRef} type="text" placeholder="Cari nama / scan barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing} style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', fontSize: '15px' }} />
                   <button style={{ backgroundColor: colors.primary, color: '#000', border: 'none', borderRadius: '12px', padding: '0 20px', fontWeight: 'bold', fontSize: '20px' }}>[-]</button>
-                </div>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <div style={{ color: colors.primary, fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px' }}>⭐ PRODUK TERLARIS</div>
                 </div>
 
                 <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '20px' }}>
@@ -453,7 +463,8 @@ const App = () => {
                 </div>
               </div>
 
-              <div style={{ height: isMobile ? 'auto' : '100%', width: isMobile ? '100%' : '380px', backgroundColor: colors.panel, borderRadius: isMobile ? '24px 24px 0 0' : '20px', display: 'flex', flexDirection: 'column', flexShrink: 0, border: `1px solid ${colors.panelBorder}`, padding: '20px' }}>
+              {/* KERANJANG (UKURAN TETAP DI BAWAH AGAR TIDAK MENUTUPI KATALOG) */}
+              <div style={{ flexShrink: 0, height: isMobile ? '50vh' : '100%', width: isMobile ? '100%' : '380px', backgroundColor: colors.panel, borderRadius: isMobile ? '24px 24px 0 0' : '20px', display: 'flex', flexDirection: 'column', border: `1px solid ${colors.panelBorder}`, padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                   <h3 style={{ margin: 0, fontSize: '16px', color: colors.textMain, display: 'flex', alignItems: 'center', gap: '8px' }}>🛒 KERANJANG</h3>
                   {isGrosirAvailable && (
@@ -462,10 +473,9 @@ const App = () => {
                       <option value="MEMBER">MEMBER (Grosir)</option>
                     </select>
                   )}
-                  <div style={{ backgroundColor: colors.primary, color: '#000', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{keranjang.reduce((sum, i) => sum + parseFloat(i.qty||0), 0)} item</div>
                 </div>
 
-                <div style={{ flex: isMobile ? 'none' : 1, overflowY: 'auto', maxHeight: isMobile ? '120px' : 'auto', marginBottom: '15px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', marginBottom: '15px' }}>
                   {keranjang.map(k => (
                     <div key={k.kode} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '10px', marginBottom: '10px' }}>
                       <div style={{ flex: 1 }}>
@@ -497,8 +507,8 @@ const App = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                    <button onClick={() => setPembayaran('CASH')} style={{ flex: 1, padding: '15px', backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><span>💵</span> CASH</button>
-                    <button onClick={() => setPembayaran('TF')} style={{ flex: 1, padding: '15px', backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><span>💳</span> TF</button>
+                    <button onClick={() => setPembayaran('CASH')} style={{ flex: 1, padding: '12px', backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px' }}>💵 CASH</button>
+                    <button onClick={() => setPembayaran('TF')} style={{ flex: 1, padding: '12px', backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px' }}>💳 TF</button>
                   </div>
                   
                   <button onClick={prosesCheckout} disabled={isProcessing || keranjang.length === 0} style={{ width: '100%', padding: '16px', backgroundColor: isProcessing || keranjang.length === 0 ? colors.btnBlue : colors.primary, color: isProcessing || keranjang.length === 0 ? colors.textMuted : '#000', fontWeight: 'bold', border: 'none', borderRadius: '12px', fontSize: '16px', cursor: 'pointer' }}>BAYAR SEKARANG</button>
@@ -507,7 +517,7 @@ const App = () => {
             </div>
           )}
 
-          {/* ======================= TAB DASHBOARD OWNER & ORDER SALES ======================= */}
+          {/* ======================= TAB DASHBOARD OWNER ======================= */}
           {activeTab === 'DASHBOARD' && role === 'OWNER' && (
             <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '15px' : '0' }}>
               <h2 style={{ color: colors.primary, marginBottom: '20px' }}>📊 Dashboard Pusat</h2>
@@ -523,93 +533,52 @@ const App = () => {
                     <div style={{ backgroundColor: colors.btnBlue, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.panelBorder}` }}>
                       <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '5px' }}>TOTAL PENJUALAN</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.totalPenjualan)}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}><span>Cash: {formatRp(dashboardData.ringkasan?.cash)}</span><span>TF: {formatRp(dashboardData.ringkasan?.tf)}</span></div>
                     </div>
                     <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.success}` }}>
                       <div style={{ fontSize: '13px', color: colors.success, marginBottom: '5px' }}>ESTIMASI KAS FISIK</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.kasFisik)}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}><span>Pengeluaran: {formatRp(dashboardData.ringkasan?.pengeluaran)}</span></div>
                     </div>
                     <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '12px', border: `1px solid ${colors.primary}` }}>
                       <div style={{ fontSize: '13px', color: colors.primary, marginBottom: '5px' }}>TOTAL ASET (Nilai Jual)</div>
                       <div style={{ fontSize: '26px', fontWeight: 'bold', color: colors.textMain }}>{formatRp(dashboardData.ringkasan?.totalAset)}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}><span>Total Stok: {dashboardData.ringkasan?.totalStok} Item</span></div>
                     </div>
                   </div>
 
-                  <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, marginBottom: '25px', overflowX: 'auto' }}>
-                    <h3 style={{ margin: '0 0 15px 0', color: colors.primary, fontSize: '16px' }}>Performa Cabang Hari Ini</h3>
-                    <table style={{ width: '100%', minWidth: '700px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', color: colors.textMain }}>
-                      <thead><tr style={{ borderBottom: `2px solid ${colors.panelBorder}`, color: colors.textMuted }}><th style={{ padding: '10px' }}>Cabang</th><th style={{ padding: '10px' }}>Penjualan</th><th style={{ padding: '10px' }}>CASH</th><th style={{ padding: '10px' }}>TF</th><th style={{ padding: '10px' }}>Pengeluaran</th><th style={{ padding: '10px' }}>Kas Akhir</th></tr></thead>
-                      <tbody>
-                        {dashboardData.performaCabang?.map((c, i) => (
-                          <tr key={i} style={{ borderBottom: `1px solid ${colors.bg}` }}><td style={{ padding: '10px', fontWeight: 'bold' }}>{c.cabang}</td><td style={{ padding: '10px', color: colors.success, fontWeight: 'bold' }}>{formatRp(c.penjualan)}</td><td style={{ padding: '10px' }}>{formatRp(c.cash)}</td><td style={{ padding: '10px' }}>{formatRp(c.tf)}</td><td style={{ padding: '10px', color: colors.danger }}>{formatRp(c.pengeluaran)}</td><td style={{ padding: '10px', fontWeight: 'bold', color: colors.primary }}>{formatRp(c.kasAkhir)}</td></tr>
+                  {/* TABEL ORDER SALES (RESTOK) */}
+                  <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.danger}`, marginBottom: '25px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                      <h3 style={{ margin: 0, color: colors.primary, fontSize: '16px' }}>📋 Order Sales (Stok &lt; 10)</h3>
+                      <span style={{ backgroundColor: colors.danger, color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{produkKritis.length} Item Perlu Restok</span>
+                    </div>
+                    
+                    {orderSalesList.length === 0 ? (
+                      <div style={{ color: colors.success, textAlign: 'center', padding: '10px 0', fontWeight: 'bold' }}>Semua stok aman (di atas 10).</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '15px' }}>
+                        {orderSalesList.map(([salesName, items]) => (
+                          <div key={salesName} style={{ backgroundColor: colors.bg, border: `1px solid ${colors.panelBorder}`, borderRadius: '12px', padding: '15px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '10px', marginBottom: '10px' }}>
+                              <span style={{ fontWeight: 'bold', color: colors.textMain, fontSize: '15px' }}>👤 {salesName}</span>
+                              <span style={{ color: colors.primary, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.btnBlue, padding: '4px 8px', borderRadius: '6px' }}>{items.length} Produk</span>
+                            </div>
+                            <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '5px' }}>
+                              {items.map((item, idx) => (
+                                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px', color: colors.textMuted }}>
+                                  <span>{item.nama}</span>
+                                  <span style={{ color: Number(item.stok) < 5 ? colors.danger : '#f59e0b', fontWeight: 'bold' }}>Sisa: {item.stok}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    )}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '20px' }}>
-                    <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, overflowX: 'auto' }}>
-                      <h3 style={{ margin: '0 0 15px 0', color: colors.primary, fontSize: '16px' }}>Ringkasan Stok Cabang ⚠️</h3>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', color: colors.textMain }}>
-                        <thead><tr style={{ borderBottom: `2px solid ${colors.panelBorder}`, color: colors.textMuted }}><th style={{ padding: '10px' }}>Cabang</th><th style={{ padding: '10px', textAlign: 'center' }}>Total Macam</th><th style={{ padding: '10px', textAlign: 'center', color: '#f59e0b' }}>Stok &lt; 10</th><th style={{ padding: '10px', textAlign: 'center', color: colors.danger }}>Stok &lt; 5</th></tr></thead>
-                        <tbody>
-                          {dashboardData.stokCabang?.map((s, i) => (
-                            <tr key={i} style={{ borderBottom: `1px solid ${colors.bg}` }}><td style={{ padding: '10px', fontWeight: 'bold' }}>{s.cabang}</td><td style={{ padding: '10px', textAlign: 'center' }}>{s.jumlahProduk}</td><td style={{ padding: '10px', textAlign: 'center', color: '#f59e0b', fontWeight: 'bold' }}>{s.stokKurang10}</td><td style={{ padding: '10px', textAlign: 'center', color: colors.danger, fontWeight: 'bold' }}>{s.stokKurang5}</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, overflowX: 'auto' }}>
-                      <h3 style={{ margin: '0 0 15px 0', color: colors.primary, fontSize: '16px' }}>Top Produk Terjual 🏆</h3>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', color: colors.textMain }}>
-                        <thead><tr style={{ borderBottom: `2px solid ${colors.panelBorder}`, color: colors.textMuted }}><th style={{ padding: '10px' }}>Nama Produk</th><th style={{ padding: '10px', textAlign: 'right' }}>Qty Terjual</th></tr></thead>
-                        <tbody>
-                          {dashboardData.topProduk?.map((t, i) => (
-                            <tr key={i} style={{ borderBottom: `1px solid ${colors.bg}` }}><td style={{ padding: '10px' }}>{t.nama}</td><td style={{ padding: '10px', textAlign: 'right', fontWeight: 'bold', color: colors.success }}>{t.qty} PCS</td></tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', color: colors.textMuted, marginTop: '50px' }}>Gagal memuat data Dashboard. Pastikan Google Sheets Dashboard Anda memiliki data.</div>
+                <div style={{ textAlign: 'center', color: colors.textMuted, marginTop: '50px' }}>Gagal memuat data Dashboard.</div>
               )}
-
-              {/* FITUR BARU: ORDER SALES (RESTOK BARANG) */}
-              <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, marginTop: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                  <h3 style={{ margin: 0, color: colors.primary, fontSize: '16px' }}>📋 Order Sales (Stok &lt; 10)</h3>
-                  <span style={{ backgroundColor: colors.danger, color: 'white', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' }}>{produkKritis.length} Item Perlu Restok</span>
-                </div>
-                
-                {orderSalesList.length === 0 ? (
-                  <div style={{ color: colors.textMuted, textAlign: 'center', padding: '20px 0' }}>Semua stok aman (di atas 10).</div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '15px' }}>
-                    {orderSalesList.map(([salesName, items]) => (
-                      <div key={salesName} style={{ backgroundColor: colors.bg, border: `1px solid ${colors.panelBorder}`, borderRadius: '12px', padding: '15px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px dashed ${colors.panelBorder}`, paddingBottom: '10px', marginBottom: '10px' }}>
-                          <span style={{ fontWeight: 'bold', color: colors.textMain, fontSize: '15px' }}>👤 {salesName}</span>
-                          <span style={{ color: colors.primary, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.btnBlue, padding: '4px 8px', borderRadius: '6px' }}>{items.length} Produk</span>
-                        </div>
-                        <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '5px' }}>
-                          {items.map((item, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px', color: colors.textMuted }}>
-                              <span>{item.nama}</span>
-                              <span style={{ color: Number(item.stok) < 5 ? colors.danger : '#f59e0b', fontWeight: 'bold' }}>Sisa: {item.stok}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div style={{ height: '30px' }}></div>
             </div>
           )}
 
