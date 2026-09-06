@@ -27,7 +27,6 @@ const App = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scannerRef = useRef(null);
 
-  // KEDUA API SUDAH DIMASUKKAN
   const API_URL = 'https://script.google.com/macros/s/AKfycbwxWGBYPBgPlUwtsg2CTHjq7DzVRSVDVrkXKK_9LI0thuLof7zUI_ixrHRA4l5GZw/exec'; 
   const DASHBOARD_API = 'https://script.google.com/macros/s/AKfycbwG-mQSucNHto86r0c8Nf4321W9dqRFEt4DgTJwnzxA9v0nquoc_bYigC0wUVLlBDoU/exec';
 
@@ -180,10 +179,9 @@ const App = () => {
   const totalAkhir = Math.max(0, subtotal - diskon);
 
   // ==============================================================
-  // KUMPULAN FUNGSI FULL (TIDAK ADA YANG DISINGKAT LAGI!)
+  // UPDATE BARU: STRUK DENGAN UANG DIBAYAR & KEMBALIAN
   // ==============================================================
-
-  const formatCetakStruk = (noStruk, itemsData, sb, ds, tot, tp) => {
+  const formatCetakStruk = (noStruk, itemsData, sb, ds, tot, tp, bayar = tot, kembali = 0) => {
     const w = window.open('', '_blank', 'width=300,height=600');
     if (w) {
       let htmlStruk = `<div style="font-family: monospace; font-size: 12px; width: 100%; max-width: 220px; margin: 0 auto; color: #000;"><div style="text-align: center; font-weight: bold; font-size: 14px;">INDRA JAYA PUSAT</div><div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px;">${new Date().toLocaleString('id-ID')}<br>Struk: ${noStruk}<br>Pelanggan: ${tipePelanggan}<br>Tipe: ${tp}</div><table style="width: 100%; font-size: 12px; border-collapse: collapse;">`;
@@ -191,7 +189,14 @@ const App = () => {
         let hrg = item.harga || Math.round((item.total||0)/(item.qty||1)); 
         htmlStruk += `<tr><td colspan="3">${item.nama.substring(0, 18)}</td></tr><tr><td>${item.qty}x</td><td>${hrg.toLocaleString('id-ID')}</td><td style="text-align: right;">${((item.qty * hrg) || item.total).toLocaleString('id-ID')}</td></tr>`; 
       });
-      htmlStruk += `</table><div style="border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px;"><table style="width: 100%; font-size: 12px;"><tr><td>Subtotal</td><td style="text-align: right;">${sb.toLocaleString('id-ID')}</td></tr><tr><td>Diskon</td><td style="text-align: right;">${ds.toLocaleString('id-ID')}</td></tr><tr style="font-weight: bold; font-size: 14px;"><td>TOTAL</td><td style="text-align: right;">${tot.toLocaleString('id-ID')}</td></tr></table></div><div style="text-align: center; margin-top: 10px;">Terima Kasih</div></div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),500);}</script>`;
+      htmlStruk += `</table><div style="border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px;"><table style="width: 100%; font-size: 12px;"><tr><td>Subtotal</td><td style="text-align: right;">${sb.toLocaleString('id-ID')}</td></tr><tr><td>Diskon</td><td style="text-align: right;">${ds.toLocaleString('id-ID')}</td></tr><tr style="font-weight: bold; font-size: 14px;"><td>TOTAL</td><td style="text-align: right;">${tot.toLocaleString('id-ID')}</td></tr>`;
+      
+      // TAMPILKAN UANG TUNAI & KEMBALIAN DI STRUK JIKA CASH
+      if (tp === 'CASH') {
+        htmlStruk += `<tr><td colspan="2" style="border-top: 1px dashed #000; margin-top: 2px; padding-top: 2px;"></td></tr><tr><td>Tunai</td><td style="text-align: right;">${bayar.toLocaleString('id-ID')}</td></tr><tr><td>Kembali</td><td style="text-align: right;">${kembali.toLocaleString('id-ID')}</td></tr>`;
+      }
+      
+      htmlStruk += `</table></div><div style="text-align: center; margin-top: 10px;">Terima Kasih</div></div><script>window.onload=function(){window.print();setTimeout(()=>window.close(),500);}</script>`;
       w.document.write(htmlStruk); w.document.close();
     }
   };
@@ -200,12 +205,27 @@ const App = () => {
     if (keranjang.length === 0) return alert('Keranjang kosong!');
     setIsProcessing(true);
     
-    const validKeranjang = keranjang.map(k => ({
-      ...k, 
-      qty: parseFloat(k.qty)||1,
-      harga: getHargaAktif(k) 
-    }));
-    
+    // UPDATE BARU: INPUT NOMINAL UANG & KEMBALIAN
+    let uangBayarCASH = totalAkhir;
+    let uangKembalian = 0;
+
+    if (pembayaran === 'CASH') {
+      const inputBayar = prompt(`Total Belanja: Rp ${totalAkhir.toLocaleString('id-ID')}\n\nMasukkan NOMINAL UANG TUNAI dari pelanggan:`);
+      if (inputBayar === null) {
+        setIsProcessing(false);
+        return; // Batal Checkout
+      }
+      const angkaBayar = parseInt(inputBayar.replace(/\D/g, ''));
+      if (isNaN(angkaBayar) || angkaBayar < totalAkhir) {
+        alert(`Transaksi Batal!\nUang tidak cukup atau format salah.\nMinimal Bayar: Rp ${totalAkhir.toLocaleString('id-ID')}`);
+        setIsProcessing(false);
+        return;
+      }
+      uangBayarCASH = angkaBayar;
+      uangKembalian = angkaBayar - totalAkhir;
+    }
+
+    const validKeranjang = keranjang.map(k => ({ ...k, qty: parseFloat(k.qty)||1, harga: getHargaAktif(k) }));
     const payload = { member: tipePelanggan, pembayaran, diskon, subtotal, totalAkhir, items: validKeranjang, timestamp: new Date().toISOString() };
 
     if (!navigator.onLine) {
@@ -215,8 +235,11 @@ const App = () => {
       localStorage.setItem('offline_tx', JSON.stringify(pending));
       setOfflineQueue(pending.length);
       
-      const confirmPrint = window.confirm(`INTERNET TERPUTUS!\nTransaksi disimpan otomatis ke memori HP (Mode Offline).\n\nIngin mencetak struk sekarang?`);
-      if (confirmPrint) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
+      let msg = `INTERNET TERPUTUS! Transaksi diamankan ke Mode Offline.\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
+      if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
+      msg += `\n\nIngin mencetak struk sekarang?`;
+      
+      if (window.confirm(msg)) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
       
       setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       setIsProcessing(false); return;
@@ -226,8 +249,11 @@ const App = () => {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
       const result = await response.json();
       if (result.status === "success") {
-        const confirmPrint = window.confirm(`Transaksi Berhasil!\nNo Struk: ${result.struk}\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}\n\nIngin mencetak struk sekarang?`);
-        if (confirmPrint) formatCetakStruk(result.struk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
+        let msg = `Transaksi Berhasil!\nNo Struk: ${result.struk}\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
+        if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
+        msg += `\n\nIngin mencetak struk sekarang?`;
+
+        if (window.confirm(msg)) formatCetakStruk(result.struk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
         setKeranjang([]); setDiskon(0); setKeyword(''); if(!isMobile) scannerRef.current?.focus();
       }
     } catch (e) { 
@@ -237,8 +263,11 @@ const App = () => {
       localStorage.setItem('offline_tx', JSON.stringify(pending));
       setOfflineQueue(pending.length);
       
-      alert("Koneksi gagal saat proses! Transaksi dialihkan ke Mode Offline.");
-      formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran);
+      let msg = `Koneksi gagal! Transaksi dialihkan ke Mode Offline.\nTotal: Rp ${totalAkhir.toLocaleString('id-ID')}`;
+      if (pembayaran === 'CASH') msg += `\nUang Diterima: Rp ${uangBayarCASH.toLocaleString('id-ID')}\nKEMBALIAN: Rp ${uangKembalian.toLocaleString('id-ID')}`;
+      msg += `\n\nIngin mencetak struk sekarang?`;
+      
+      if (window.confirm(msg)) formatCetakStruk(payload.offlineStruk, validKeranjang, subtotal, diskon, totalAkhir, pembayaran, uangBayarCASH, uangKembalian);
       setKeranjang([]); setDiskon(0); setKeyword('');
     } finally { setIsProcessing(false); }
   };
@@ -263,7 +292,6 @@ const App = () => {
   const prosesUpdateHarga = async () => {
     const kataKunci = prompt("UBAH HARGA\nMasukkan KODE atau NAMA BARANG yang ingin diubah:");
     if (!kataKunci) return;
-
     const barang = produk.find(p => String(p.kode).toLowerCase() === kataKunci.toLowerCase() || String(p.barcode) === kataKunci || String(p.nama).toLowerCase().includes(kataKunci.toLowerCase()));
     if (!barang) return alert("Barang tidak ditemukan di sistem!");
 
@@ -277,22 +305,16 @@ const App = () => {
 
     setIsProcessing(true);
     try {
-      const response = await fetch(API_URL, { 
-        method: 'POST', 
-        body: JSON.stringify({ action: 'updateHarga', kode: barang.kode, hargaBaru: angkaBaru }) 
-      });
+      const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateHarga', kode: barang.kode, hargaBaru: angkaBaru }) });
       const result = await response.json();
-      
       if (result.status === 'success') {
         alert("Harga berhasil diubah di Database!");
         fetch(`${API_URL}?action=getProduk`).then(res => res.json()).then(data => setProduk(Array.isArray(data) ? data : [])).catch(err => console.error(err));
-      } else {
-        alert("Gagal: " + result.message);
-      }
-    } catch (e) { alert("Error jaringan saat mengubah harga."); } 
-    finally { setIsProcessing(false); }
+      } else { alert("Gagal: " + result.message); }
+    } catch (e) { alert("Error jaringan saat mengubah harga."); } finally { setIsProcessing(false); }
   };
 
+  // FITUR-FITUR UTILITY (TETAP AMAN)
   const prosesInputSaldo = async () => {
     const nominal = prompt("Masukkan jumlah Saldo Awal (CASH) hari ini:\nContoh: 150000");
     if (!nominal) return;
@@ -352,6 +374,7 @@ const App = () => {
 
   const formatRp = (angka) => { let num = Number(angka); if(isNaN(num)) return "Rp 0"; return "Rp " + num.toLocaleString('id-ID'); };
 
+  // --- LAYAR LOGIN ---
   if (!isLoggedIn) {
     return (
       <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg, padding: '20px', fontFamily: "'Segoe UI', Roboto, sans-serif" }}>
@@ -367,6 +390,7 @@ const App = () => {
     );
   }
 
+  // --- LAYAR UTAMA ---
   return (
     <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: '100vh', fontFamily: "'Segoe UI', Roboto, sans-serif", backgroundColor: colors.bg, color: colors.textMain }}>
       
@@ -490,7 +514,7 @@ const App = () => {
                     <button onClick={() => setPembayaran('TF')} style={{ flex: 1, padding: '15px', backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}><span>💳</span> TF</button>
                   </div>
                   
-                  <button onClick={prosesCheckout} disabled={isProcessing || keranjang.length === 0} style={{ width: '100%', padding: '16px', backgroundColor: isProcessing || keranjang.length === 0 ? colors.btnBlue : colors.primary, color: isProcessing || keranjang.length === 0 ? colors.textMuted : '#000', fontWeight: 'bold', border: 'none', borderRadius: '12px', fontSize: '16px', cursor: 'pointer' }}>BAYAR</button>
+                  <button onClick={prosesCheckout} disabled={isProcessing || keranjang.length === 0} style={{ width: '100%', padding: '16px', backgroundColor: isProcessing || keranjang.length === 0 ? colors.btnBlue : colors.primary, color: isProcessing || keranjang.length === 0 ? colors.textMuted : '#000', fontWeight: 'bold', border: 'none', borderRadius: '12px', fontSize: '16px', cursor: 'pointer' }}>BAYAR SEKARANG</button>
                 </div>
               </div>
             </div>
@@ -573,9 +597,34 @@ const App = () => {
             </div>
           )}
 
-          {/* ======================= TAB RIWAYAT ======================= */}
+          {/* ======================= TAB RIWAYAT (DIKEMBALIKAN FULL 5 KOTAK!) ======================= */}
           {activeTab === 'RIWAYAT' && (
             <div style={{ height: '100%', overflowY: 'auto', padding: isMobile ? '15px' : '0' }}>
+              
+              {/* 5 KOTAK LAPORAN DIKEMBALIKAN */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.panelBorder}` }}>
+                  <div style={{ fontSize: '11px', marginBottom: '5px', color: colors.textMuted }}>TOTAL OMZET</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: colors.primary }}>{formatRp(riwayat.reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                </div>
+                <div style={{ backgroundColor: '#064e3b', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.success}` }}>
+                  <div style={{ fontSize: '11px', marginBottom: '5px', color: '#6ee7b7' }}>KAS SEHARUSNYA</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(Number(ringkasan?.saldoAwal || 0) + riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + Number(r.total || 0), 0))}</div>
+                </div>
+                <div style={{ backgroundColor: '#4c1d95', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid #7c3aed` }}>
+                  <div style={{ fontSize: '11px', marginBottom: '5px', color: '#c4b5fd' }}>SALDO AWAL</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(ringkasan?.saldoAwal || 0)}</div>
+                </div>
+                <div style={{ backgroundColor: '#78350f', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid #d97706` }}>
+                  <div style={{ fontSize: '11px', marginBottom: '5px', color: '#fcd34d' }}>OMZET CASH</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran !== 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                </div>
+                <div style={{ backgroundColor: '#1e3a8a', color: 'white', padding: '15px', borderRadius: '12px', border: `1px solid ${colors.btnBlue}` }}>
+                  <div style={{ fontSize: '11px', marginBottom: '5px', color: '#bfdbfe' }}>OMZET TF</div>
+                  <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold', color: 'white' }}>{formatRp(riwayat.filter(r => r.pembayaran === 'TF').reduce((sum, r) => sum + (r.total || 0), 0))}</div>
+                </div>
+              </div>
+
               <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}` }}>
                 <h3 style={{ margin: '0 0 15px 0', color: colors.primary, fontSize: '16px' }}>Riwayat Transaksi</h3>
                 <table style={{ width: '100%', minWidth: '650px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px', color: colors.textMain }}>
@@ -586,7 +635,7 @@ const App = () => {
             </div>
           )}
 
-          {/* ======================= TAB UTILITY ======================= */}
+          {/* ======================= TAB UTILITY (TETAP AMAN) ======================= */}
           {activeTab === 'UTILITY' && (
             <div style={{ padding: isMobile ? '15px' : '0' }}>
               <div style={{ backgroundColor: colors.panel, padding: '25px', borderRadius: '16px', border: `1px solid ${colors.panelBorder}`, maxWidth: '600px' }}>
