@@ -94,7 +94,6 @@ const App = () => {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(pending) });
       const result = await response.json();
       
-      // Jika nyangkut karena belum tutup kasir
       if (result.status === 'error' && result.message === 'TUTUP_KASIR_DULU') {
          alert(`Sinkronisasi Offline DITOLAK!\nSistem Sheets masih menyimpan data tanggal: ${result.tgl}.\nHarap Tutup Kasir & Arsipkan data kemarin di Sheets terlebih dahulu.`);
          setPendingDate(result.tgl);
@@ -142,13 +141,11 @@ const App = () => {
       fetch(`${API_URL}?action=getProduk`)
         .then(res => res.json())
         .then(data => {
-          // Sistem baru memisahkan meta data dan produk
           if (data.status === "success") {
             setProduk(data.data || []);
             if (data.pendingClose) setPendingDate(data.tglTertahan);
             else setPendingDate(null);
           } else {
-            // Backward compatibility jika kode API belum terupdate sempurna
             setProduk(Array.isArray(data) ? data : []);
           }
         }).catch(err => console.error(err));
@@ -191,6 +188,7 @@ const App = () => {
   });
 
   const tambahKeKeranjang = (item) => {
+    if (pendingDate) return; // Proteksi ganda
     setKeranjang(prev => {
       const ada = prev.find(k => k.kode === item.kode);
       if (ada) return prev.map(k => k.kode === item.kode ? { ...k, qty: parseFloat(k.qty) + 1 } : k);
@@ -199,12 +197,20 @@ const App = () => {
     setKeyword(''); if(!isMobile) scannerRef.current?.focus();
   };
 
-  const handleScanner = (e) => { if (e.key === 'Enter' && keyword.trim() !== '') { let item = produk.find(p => String(p.kode).toLowerCase() === keyword.toLowerCase() || String(p.barcode) === keyword); if (!item && produkDifilter.length === 1) item = produkDifilter[0]; if (item) tambahKeKeranjang(item); else { alert('Barang tidak ditemukan!'); setKeyword(''); if(!isMobile) scannerRef.current?.focus(); } } };
+  const handleScanner = (e) => { 
+    if (pendingDate) return; // Proteksi ganda scanner
+    if (e.key === 'Enter' && keyword.trim() !== '') { 
+      let item = produk.find(p => String(p.kode).toLowerCase() === keyword.toLowerCase() || String(p.barcode) === keyword); 
+      if (!item && produkDifilter.length === 1) item = produkDifilter[0]; 
+      if (item) tambahKeKeranjang(item); 
+      else { alert('Barang tidak ditemukan!'); setKeyword(''); if(!isMobile) scannerRef.current?.focus(); } 
+    } 
+  };
 
-  const ubahQtyKetikan = (kode, nilai) => setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: nilai } : k));
-  const validasiQty = (kode, nilai) => { let angka = parseFloat(nilai); if (isNaN(angka) || angka <= 0) angka = 1; setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: angka } : k)); };
-  const ubahQty = (kode, delta) => setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: Math.max(0.1, (parseFloat(k.qty)||0) + delta) } : k));
-  const hapusItem = (kode) => setKeranjang(prev => prev.filter(k => k.kode !== kode));
+  const ubahQtyKetikan = (kode, nilai) => { if(!pendingDate) setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: nilai } : k)); };
+  const validasiQty = (kode, nilai) => { if(!pendingDate) { let angka = parseFloat(nilai); if (isNaN(angka) || angka <= 0) angka = 1; setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: angka } : k)); } };
+  const ubahQty = (kode, delta) => { if(!pendingDate) setKeranjang(prev => prev.map(k => k.kode === kode ? { ...k, qty: Math.max(0.1, (parseFloat(k.qty)||0) + delta) } : k)); };
+  const hapusItem = (kode) => { if(!pendingDate) setKeranjang(prev => prev.filter(k => k.kode !== kode)); };
   
   const subtotal = keranjang.reduce((sum, item) => sum + (getHargaAktif(item) * (parseFloat(item.qty)||0)), 0);
   const totalAkhir = Math.max(0, subtotal - diskon);
@@ -228,15 +234,9 @@ const App = () => {
 
   const prosesCheckout = async () => {
     if (keranjang.length === 0) return alert('Keranjang kosong!');
-    
-    // PENCEGAHAN DOUBLE CHECK JIKA BYPASS
-    if (pendingDate) {
-      alert(`SISTEM TERKUNCI!\nData tanggal ${pendingDate} belum diarsipkan di Sheets.`);
-      return;
-    }
+    if (pendingDate) return alert(`SISTEM TERKUNCI!\nData tanggal ${pendingDate} belum diarsipkan di Sheets.`);
 
     setIsProcessing(true);
-    
     let uangBayarCASH = totalAkhir;
     let uangKembalian = 0;
 
@@ -275,7 +275,6 @@ const App = () => {
       const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
       const result = await response.json();
       
-      // JIKA BACKEND MENOLAK KARENA HARI BELUM DITUTUP
       if (result.status === "error" && result.message === "TUTUP_KASIR_DULU") {
          alert(`TRANSAKSI GAGAL!\nSistem mendeteksi ada transaksi di tanggal ${result.tgl} yang belum dibereskan.\nHarap Tutup Kasir dan Pindahkan ke Arsip Harian.`);
          setPendingDate(result.tgl);
@@ -451,13 +450,6 @@ const App = () => {
       {/* CONTAINER KONTEN UTAMA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: isMobile ? '65px' : '0' }}>
         
-        {/* BANNER KUNCI HARI (SANGAT MENDESAK) */}
-        {pendingDate && (
-          <div style={{ backgroundColor: colors.danger, color: 'white', padding: '12px 15px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', animation: 'pulse 1.5s infinite', flexShrink: 0 }}>
-            🚨 SISTEM TERKUNCI: Anda belum mengarsipkan data tanggal {pendingDate}! Silakan ke menu Utility, lakukan Tutup Kasir & Pindahkan ke Arsip Harian di Sheets.
-          </div>
-        )}
-
         {/* NOTIFIKASI STOK UNDER 10 */}
         {!pendingDate && produkKritis.length > 0 && (role === 'KASIR' || role === 'OWNER') && (
           <div style={{ backgroundColor: '#f59e0b', color: 'white', padding: '8px 15px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', flexShrink: 0 }}>
@@ -486,24 +478,39 @@ const App = () => {
           
           {/* ======================= TAB KASIR ======================= */}
           {activeTab === 'KASIR' && (role === 'KASIR' || role === 'OWNER') && (
-            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flex: 1, minHeight: 0, gap: isMobile ? '0' : '20px' }}>
+            <div style={{ position: 'relative', display: 'flex', flexDirection: isMobile ? 'column' : 'row', flex: 1, minHeight: 0, gap: isMobile ? '0' : '20px' }}>
               
+              {/* LAYAR KUNCI (LOCK SCREEN) MUTLAK! */}
+              {pendingDate && (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(4, 11, 22, 0.95)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: isMobile ? '0' : '20px', padding: '20px', border: `2px solid ${colors.danger}` }}>
+                   <div style={{ fontSize: '70px', marginBottom: '10px' }}>🔒</div>
+                   <h2 style={{ color: colors.danger, textAlign: 'center', margin: '0 0 10px 0' }}>KASIR TERKUNCI</h2>
+                   <p style={{ color: colors.textMain, textAlign: 'center', maxWidth: '350px', fontSize: '14px', lineHeight: '1.5' }}>
+                     Sistem mendeteksi transaksi tanggal <strong style={{color: colors.primary}}>{pendingDate}</strong> belum diarsipkan.<br/><br/>
+                     Anda tidak dapat menginput penjualan baru sebelum data kemarin ditutup!
+                   </p>
+                   <button onClick={() => setActiveTab('UTILITY')} style={{ padding: '12px 24px', backgroundColor: colors.primary, color: '#000', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', marginTop: '20px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255, 184, 0, 0.3)' }}>
+                     Pergi ke Menu Tutup Kasir
+                   </button>
+                </div>
+              )}
+
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: isMobile ? '10px 15px 0' : '0' }}>
                 <div style={{ display: 'flex', backgroundColor: colors.panel, borderRadius: '12px', padding: '4px', border: `1px solid ${colors.panelBorder}`, marginBottom: '10px', flexShrink: 0 }}>
                   <span style={{ padding: '8px 12px', color: colors.textMuted }}>🔍</span>
-                  <input ref={scannerRef} type="text" placeholder="Cari nama / scan barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing || pendingDate} style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', fontSize: '14px' }} />
+                  <input ref={scannerRef} type="text" placeholder="Cari nama / scan barcode..." value={keyword} onChange={e => setKeyword(e.target.value)} onKeyDown={handleScanner} disabled={isProcessing || !!pendingDate} style={{ flex: 1, backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', fontSize: '14px' }} />
                 </div>
 
                 <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '10px' }}>
                   {produk.length === 0 ? <p style={{ color: colors.textMuted, textAlign: 'center', marginTop: '20px' }}>Memuat data produk...</p> : produkDifilter.map(p => (
-                    <div key={p.kode} style={{ backgroundColor: colors.panel, borderRadius: '12px', padding: '10px', border: `1px solid ${colors.panelBorder}`, display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', opacity: pendingDate ? 0.5 : 1 }}>
+                    <div key={p.kode} style={{ backgroundColor: colors.panel, borderRadius: '12px', padding: '10px', border: `1px solid ${colors.panelBorder}`, display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                       <div style={{ width: '40px', height: '40px', backgroundColor: 'white', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>💡</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 'bold', fontSize: '14px', color: colors.textMain }}>{p.nama}</div>
                         <div style={{ color: colors.primary, fontWeight: 'bold', fontSize: '13px', marginTop: '2px' }}>Rp {Number(p.harga).toLocaleString('id-ID')}</div>
                         {p.hargaGrosir > 0 && <span style={{fontSize: '10px', backgroundColor: colors.btnBlue, color: colors.primary, padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '5px'}}>Bisa Grosir</span>}
                       </div>
-                      <button onClick={() => !pendingDate && tambahKeKeranjang(p)} disabled={pendingDate} style={{ backgroundColor: 'transparent', border: `2px solid ${colors.btnBlue}`, color: colors.primary, width: '35px', height: '35px', borderRadius: '8px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pendingDate ? 'not-allowed' : 'pointer' }}>+</button>
+                      <button onClick={() => !pendingDate && tambahKeKeranjang(p)} disabled={!!pendingDate} style={{ backgroundColor: 'transparent', border: `2px solid ${colors.btnBlue}`, color: colors.primary, width: '35px', height: '35px', borderRadius: '8px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pendingDate ? 'not-allowed' : 'pointer' }}>+</button>
                     </div>
                   ))}
                 </div>
@@ -513,7 +520,7 @@ const App = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
                   <h3 style={{ margin: 0, fontSize: '16px', color: colors.textMain, display: 'flex', alignItems: 'center', gap: '8px' }}>🛒 KERANJANG ({keranjang.reduce((sum, i) => sum + parseFloat(i.qty||0), 0)})</h3>
                   {isGrosirAvailable && (
-                    <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} disabled={pendingDate} style={{ padding: '5px', borderRadius: '8px', border: `1px solid ${colors.primary}`, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.bg, color: colors.primary, cursor: 'pointer', outline: 'none' }}>
+                    <select value={tipePelanggan} onChange={(e) => setTipePelanggan(e.target.value)} disabled={!!pendingDate} style={{ padding: '5px', borderRadius: '8px', border: `1px solid ${colors.primary}`, fontSize: '12px', fontWeight: 'bold', backgroundColor: colors.bg, color: colors.primary, cursor: 'pointer', outline: 'none' }}>
                       <option value="UMUM">UMUM (Ecer)</option>
                       <option value="MEMBER">MEMBER (Grosir)</option>
                     </select>
@@ -529,11 +536,11 @@ const App = () => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '8px', border: `1px solid ${colors.panelBorder}` }}>
-                          <button onClick={() => ubahQty(k.kode, -1)} disabled={pendingDate} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>-</button>
-                          <input type="number" step="any" value={k.qty} onChange={(e) => ubahQtyKetikan(k.kode, e.target.value)} onBlur={(e) => validasiQty(k.kode, e.target.value)} disabled={pendingDate} style={{ width: '30px', textAlign: 'center', border: 'none', background: 'transparent', color: colors.textMain, outline: 'none', fontWeight: 'bold' }} />
-                          <button onClick={() => ubahQty(k.kode, 1)} disabled={pendingDate} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>+</button>
+                          <button onClick={() => ubahQty(k.kode, -1)} disabled={!!pendingDate} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>-</button>
+                          <input type="number" step="any" value={k.qty} onChange={(e) => ubahQtyKetikan(k.kode, e.target.value)} onBlur={(e) => validasiQty(k.kode, e.target.value)} disabled={!!pendingDate} style={{ width: '30px', textAlign: 'center', border: 'none', background: 'transparent', color: colors.textMain, outline: 'none', fontWeight: 'bold' }} />
+                          <button onClick={() => ubahQty(k.kode, 1)} disabled={!!pendingDate} style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: colors.primary, fontSize: '16px', fontWeight: 'bold' }}>+</button>
                         </div>
-                        <button onClick={() => hapusItem(k.kode)} disabled={pendingDate} style={{ background: 'none', border: 'none', color: colors.danger, fontSize: '18px' }}>🗑</button>
+                        <button onClick={() => hapusItem(k.kode)} disabled={!!pendingDate} style={{ background: 'none', border: 'none', color: colors.danger, fontSize: '18px' }}>🗑</button>
                       </div>
                     </div>
                   ))}
@@ -544,7 +551,7 @@ const App = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', backgroundColor: colors.bg, borderRadius: '8px', border: `1px solid ${colors.panelBorder}`, padding: '2px 8px' }}>
                       <span style={{ color: colors.textMuted, fontSize: '11px', marginRight: '5px' }}>Diskon:</span>
-                      <input type="number" value={diskon === 0 ? '' : diskon} onChange={e => setDiskon(Number(e.target.value))} disabled={pendingDate} style={{ width: '60px', backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', textAlign: 'right', fontSize: '14px', fontWeight: 'bold' }} placeholder="0" />
+                      <input type="number" value={diskon === 0 ? '' : diskon} onChange={e => setDiskon(Number(e.target.value))} disabled={!!pendingDate} style={{ width: '60px', backgroundColor: 'transparent', border: 'none', color: colors.textMain, outline: 'none', textAlign: 'right', fontSize: '14px', fontWeight: 'bold' }} placeholder="0" />
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <span style={{ fontSize: '12px', color: colors.textMuted, marginRight: '5px' }}>Total:</span>
@@ -553,10 +560,9 @@ const App = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setPembayaran('CASH')} disabled={pendingDate} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💵 CASH</button>
-                    <button onClick={() => setPembayaran('TF')} disabled={pendingDate} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💳 TF</button>
+                    <button onClick={() => setPembayaran('CASH')} disabled={!!pendingDate} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'CASH' ? colors.primary : colors.btnBlue, color: pembayaran === 'CASH' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💵 CASH</button>
+                    <button onClick={() => setPembayaran('TF')} disabled={!!pendingDate} style={{ padding: '8px', flex: 1, backgroundColor: pembayaran === 'TF' ? colors.primary : colors.btnBlue, color: pembayaran === 'TF' ? '#000' : colors.textMain, border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px' }}>💳 TF</button>
                     
-                    {/* TOMBOL BAYAR AKAN MERAH DAN TERKUNCI JIKA HARI BELUM DITUTUP */}
                     <button 
                       onClick={pendingDate ? () => { setActiveTab('UTILITY'); alert('Harap Tutup Kasir di menu ini!'); } : prosesCheckout} 
                       disabled={(!pendingDate && (isProcessing || keranjang.length === 0))} 
@@ -597,6 +603,7 @@ const App = () => {
                     </div>
                   </div>
 
+                  {/* TABEL ORDER SALES (RESTOK) */}
                   <div style={{ backgroundColor: colors.panel, padding: '20px', borderRadius: '16px', border: `1px solid ${colors.danger}`, marginBottom: '25px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                       <h3 style={{ margin: 0, color: colors.primary, fontSize: '16px' }}>📋 Order Sales (Stok &lt; 10)</h3>
